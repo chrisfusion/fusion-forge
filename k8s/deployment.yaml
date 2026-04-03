@@ -1,0 +1,175 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: fusion-forge
+  namespace: fusion
+  labels:
+    app: fusion-forge
+    app.kubernetes.io/name: fusion-forge
+    app.kubernetes.io/version: "0.1.0"
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: fusion-forge
+  template:
+    metadata:
+      labels:
+        app: fusion-forge
+    spec:
+      serviceAccountName: fusion-forge
+      containers:
+        - name: forge
+          image: ghcr.io/fusion-platform/fusion-forge:latest
+          imagePullPolicy: Always
+          ports:
+            - name: http
+              containerPort: 8080
+          env:
+            - name: DB_HOST
+              value: fusion-forge-postgresql
+            - name: DB_PORT
+              value: "5432"
+            - name: DB_NAME
+              value: fusion_forge
+            - name: DB_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: fusion-forge-db-secret
+                  key: username
+            - name: DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: fusion-forge-db-secret
+                  key: password
+            - name: INDEX_BACKEND_HOST
+              value: index-backend.fusion.svc.cluster.local
+            - name: INDEX_BACKEND_PORT
+              value: "8080"
+            - name: K8S_NAMESPACE
+              value: fusion
+            - name: BUILDER_IMAGE
+              value: ghcr.io/fusion-platform/venv-builder:latest
+            - name: OIDC_ENABLED
+              value: "true"
+            - name: OIDC_AUTH_SERVER_URL
+              value: http://keycloak.fusion.svc.cluster.local:8080/realms/fusion
+            - name: OIDC_CLIENT_ID
+              value: fusion-forge
+            # FORGE_DEV_TOKEN: DO NOT set in production
+          livenessProbe:
+            httpGet:
+              path: /q/health/live
+              port: 8080
+            initialDelaySeconds: 10
+            periodSeconds: 30
+          readinessProbe:
+            httpGet:
+              path: /q/health/ready
+              port: 8080
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          resources:
+            requests:
+              cpu: "250m"
+              memory: "256Mi"
+            limits:
+              cpu: "1000m"
+              memory: "512Mi"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: fusion-forge
+  namespace: fusion
+  labels:
+    app: fusion-forge
+spec:
+  selector:
+    app: fusion-forge
+  ports:
+    - name: http
+      port: 8080
+      targetPort: http
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: fusion-forge-db-secret
+  namespace: fusion
+type: Opaque
+stringData:
+  username: fusion
+  password: fusion
+---
+# PostgreSQL StatefulSet for fusion-forge state
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: fusion-forge-postgresql
+  namespace: fusion
+  labels:
+    app: fusion-forge-postgresql
+spec:
+  serviceName: fusion-forge-postgresql
+  replicas: 1
+  selector:
+    matchLabels:
+      app: fusion-forge-postgresql
+  template:
+    metadata:
+      labels:
+        app: fusion-forge-postgresql
+    spec:
+      containers:
+        - name: postgresql
+          image: postgres:16-alpine
+          ports:
+            - containerPort: 5432
+          env:
+            - name: POSTGRES_DB
+              value: fusion_forge
+            - name: POSTGRES_USER
+              valueFrom:
+                secretKeyRef:
+                  name: fusion-forge-db-secret
+                  key: username
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: fusion-forge-db-secret
+                  key: password
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/postgresql/data
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "128Mi"
+            limits:
+              cpu: "500m"
+              memory: "512Mi"
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        resources:
+          requests:
+            storage: 2Gi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: fusion-forge-postgresql
+  namespace: fusion
+  labels:
+    app: fusion-forge-postgresql
+spec:
+  selector:
+    app: fusion-forge-postgresql
+  ports:
+    - port: 5432
+      targetPort: 5432
+  clusterIP: None

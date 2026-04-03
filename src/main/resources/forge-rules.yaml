@@ -1,0 +1,13 @@
+# fusion-forge requirements.txt validation rules
+# This file can be mounted as a Kubernetes ConfigMap and referenced via FORGE_RULES_FILE env var.
+
+# Require exact version pinning (== operator only).
+# Set to false to allow any version specifier (>=, ~=, etc.).
+require-exact-pinning: true
+
+# List of package names that are not allowed (case-insensitive, hyphens/underscores normalised).
+# Example: banned-packages: [torch, tensorflow, private-internal-lib]
+banned-packages: []
+
+# Maximum number of package entries (blank lines and comments excluded).
+max-packages: 100
