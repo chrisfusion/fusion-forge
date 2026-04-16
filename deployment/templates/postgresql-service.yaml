@@ -1,0 +1,20 @@
+{{- if .Values.postgresql.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "fusion-forge.postgresqlName" . }}
+  namespace: {{ .Values.namespace }}
+  labels:
+    {{- include "fusion-forge.labels" . | nindent 4 }}
+    app: {{ include "fusion-forge.postgresqlName" . }}
+    app.kubernetes.io/component: postgresql
+spec:
+  clusterIP: None
+  selector:
+    app: {{ include "fusion-forge.postgresqlName" . }}
+  ports:
+    - name: postgresql
+      port: 5432
+      targetPort: postgresql
+      protocol: TCP
+{{- end }}

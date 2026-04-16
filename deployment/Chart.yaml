@@ -1,0 +1,12 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+apiVersion: v2
+name: fusion-forge
+description: fusion-forge — async Python venv builder (REST server + Kubernetes operator)
+type: application
+version: 0.1.0
+appVersion: "0.1.0"
+
+keywords:
+  - fusion
+  - venv-builder
+  - kubernetes-operator

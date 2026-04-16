@@ -1,51 +1,94 @@
 ---
+# ServiceAccount for the REST server
 apiVersion: v1
 kind: ServiceAccount
 metadata:
-  name: fusion-forge
+  name: fusion-forge-server
   namespace: fusion
 ---
-apiVersion: rbac.authorization.k8s.io/v1
-kind: Role
+# ServiceAccount for the operator
+apiVersion: v1
+kind: ServiceAccount
 metadata:
-  name: fusion-forge-role
+  name: fusion-forge-operator
   namespace: fusion
-rules:
-  # Forge creates and monitors build Jobs
-  - apiGroups: ["batch"]
-    resources: ["jobs"]
-    verbs: ["create", "get", "list", "watch", "delete"]
-  # Forge reads pod status and logs of builder pods
-  - apiGroups: [""]
-    resources: ["pods"]
-    verbs: ["get", "list", "watch"]
-  - apiGroups: [""]
-    resources: ["pods/log"]
-    verbs: ["get"]
-  # Forge creates/deletes requirements.txt ConfigMaps
-  - apiGroups: [""]
-    resources: ["configmaps"]
-    verbs: ["create", "get", "delete"]
 ---
-apiVersion: rbac.authorization.k8s.io/v1
-kind: RoleBinding
-metadata:
-  name: fusion-forge-binding
-  namespace: fusion
-subjects:
-  - kind: ServiceAccount
-    name: fusion-forge
-    namespace: fusion
-roleRef:
-  kind: Role
-  name: fusion-forge-role
-  apiGroup: rbac.authorization.k8s.io
----
-# Builder pods: no K8s API permissions needed — they only call index-backend over the network
+# ServiceAccount for builder pods (no K8s API permissions needed)
 apiVersion: v1
 kind: ServiceAccount
 metadata:
   name: fusion-forge-builder
   namespace: fusion
   annotations:
-    description: "Used by venv builder pods. No K8s API permissions."
+    description: "Used by CI builder pods. No K8s API permissions."
+---
+# Role for the REST server: create CIBuild CRs, read pods/logs
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: fusion-forge-server-role
+  namespace: fusion
+rules:
+  - apiGroups: ["build.fusion-platform.io"]
+    resources: ["cibuilds"]
+    verbs: ["create", "get", "list", "watch"]
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: [""]
+    resources: ["pods/log"]
+    verbs: ["get"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: fusion-forge-server-binding
+  namespace: fusion
+subjects:
+  - kind: ServiceAccount
+    name: fusion-forge-server
+    namespace: fusion
+roleRef:
+  kind: Role
+  name: fusion-forge-server-role
+  apiGroup: rbac.authorization.k8s.io
+---
+# Role for the operator: full lifecycle on CIBuild CRs, Jobs, ConfigMaps
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: fusion-forge-operator-role
+  namespace: fusion
+rules:
+  - apiGroups: ["build.fusion-platform.io"]
+    resources: ["cibuilds"]
+    verbs: ["get", "list", "watch", "update", "patch"]
+  - apiGroups: ["build.fusion-platform.io"]
+    resources: ["cibuilds/status"]
+    verbs: ["get", "update", "patch"]
+  - apiGroups: ["batch"]
+    resources: ["jobs"]
+    verbs: ["create", "get", "list", "watch", "update", "patch", "delete"]
+  - apiGroups: [""]
+    resources: ["configmaps"]
+    verbs: ["create", "get", "list", "watch", "delete"]
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: [""]
+    resources: ["pods/log"]
+    verbs: ["get"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: fusion-forge-operator-binding
+  namespace: fusion
+subjects:
+  - kind: ServiceAccount
+    name: fusion-forge-operator
+    namespace: fusion
+roleRef:
+  kind: Role
+  name: fusion-forge-operator-role
+  apiGroup: rbac.authorization.k8s.io

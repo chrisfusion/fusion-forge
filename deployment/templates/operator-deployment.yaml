@@ -1,0 +1,72 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: fusion-forge-operator
+  namespace: {{ .Values.namespace }}
+  labels:
+    {{- include "fusion-forge.labels" . | nindent 4 }}
+    app: fusion-forge-operator
+    app.kubernetes.io/component: operator
+    {{- with .Values.operator.deploymentLabels }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+  {{- with .Values.operator.deploymentAnnotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  replicas: {{ .Values.operator.replicas }}
+  selector:
+    matchLabels:
+      app: fusion-forge-operator
+  template:
+    metadata:
+      labels:
+        app: fusion-forge-operator
+        {{- include "fusion-forge.labels" . | nindent 8 }}
+        app.kubernetes.io/component: operator
+        {{- with .Values.operator.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      {{- with .Values.operator.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+    spec:
+      serviceAccountName: {{ include "fusion-forge.operatorSAName" . }}
+      securityContext:
+        {{- toYaml .Values.operator.podSecurityContext | nindent 8 }}
+      containers:
+        - name: operator
+          image: "{{ .Values.operator.image.repository }}:{{ .Values.operator.image.tag }}"
+          imagePullPolicy: {{ .Values.operator.image.pullPolicy }}
+          command: ["/operator"]
+          args:
+            - "--namespace={{ .Values.namespace }}"
+            - "--health-probe-bind-address=:8081"
+            - "--metrics-bind-address=:8082"
+          securityContext:
+            {{- toYaml .Values.operator.containerSecurityContext | nindent 12 }}
+          ports:
+            - name: health
+              containerPort: 8081
+              protocol: TCP
+            - name: metrics
+              containerPort: 8082
+              protocol: TCP
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: 8081
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            failureThreshold: 3
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: 8081
+            initialDelaySeconds: 10
+            periodSeconds: 30
+            failureThreshold: 3
+          resources:
+            {{- toYaml .Values.operator.resources | nindent 12 }}

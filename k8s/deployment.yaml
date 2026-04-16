@@ -1,98 +1,5 @@
 ---
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: fusion-forge
-  namespace: fusion
-  labels:
-    app: fusion-forge
-    app.kubernetes.io/name: fusion-forge
-    app.kubernetes.io/version: "0.1.0"
-spec:
-  replicas: 1
-  selector:
-    matchLabels:
-      app: fusion-forge
-  template:
-    metadata:
-      labels:
-        app: fusion-forge
-    spec:
-      serviceAccountName: fusion-forge
-      containers:
-        - name: forge
-          image: ghcr.io/fusion-platform/fusion-forge:latest
-          imagePullPolicy: Always
-          ports:
-            - name: http
-              containerPort: 8080
-          env:
-            - name: DB_HOST
-              value: fusion-forge-postgresql
-            - name: DB_PORT
-              value: "5432"
-            - name: DB_NAME
-              value: fusion_forge
-            - name: DB_USERNAME
-              valueFrom:
-                secretKeyRef:
-                  name: fusion-forge-db-secret
-                  key: username
-            - name: DB_PASSWORD
-              valueFrom:
-                secretKeyRef:
-                  name: fusion-forge-db-secret
-                  key: password
-            - name: INDEX_BACKEND_HOST
-              value: index-backend.fusion.svc.cluster.local
-            - name: INDEX_BACKEND_PORT
-              value: "8080"
-            - name: K8S_NAMESPACE
-              value: fusion
-            - name: BUILDER_IMAGE
-              value: ghcr.io/fusion-platform/venv-builder:latest
-            - name: OIDC_ENABLED
-              value: "true"
-            - name: OIDC_AUTH_SERVER_URL
-              value: http://keycloak.fusion.svc.cluster.local:8080/realms/fusion
-            - name: OIDC_CLIENT_ID
-              value: fusion-forge
-            # FORGE_DEV_TOKEN: DO NOT set in production
-          livenessProbe:
-            httpGet:
-              path: /q/health/live
-              port: 8080
-            initialDelaySeconds: 10
-            periodSeconds: 30
-          readinessProbe:
-            httpGet:
-              path: /q/health/ready
-              port: 8080
-            initialDelaySeconds: 5
-            periodSeconds: 10
-          resources:
-            requests:
-              cpu: "250m"
-              memory: "256Mi"
-            limits:
-              cpu: "1000m"
-              memory: "512Mi"
----
-apiVersion: v1
-kind: Service
-metadata:
-  name: fusion-forge
-  namespace: fusion
-  labels:
-    app: fusion-forge
-spec:
-  selector:
-    app: fusion-forge
-  ports:
-    - name: http
-      port: 8080
-      targetPort: http
----
+# Secret for database credentials
 apiVersion: v1
 kind: Secret
 metadata:
@@ -173,3 +80,141 @@ spec:
     - port: 5432
       targetPort: 5432
   clusterIP: None
+---
+# REST server Deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: fusion-forge-server
+  namespace: fusion
+  labels:
+    app: fusion-forge-server
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: fusion-forge-server
+  template:
+    metadata:
+      labels:
+        app: fusion-forge-server
+    spec:
+      serviceAccountName: fusion-forge-server
+      containers:
+        - name: server
+          image: fusion-forge:local
+          imagePullPolicy: Never
+          command: ["/server"]
+          ports:
+            - name: http
+              containerPort: 8080
+          env:
+            - name: DB_HOST
+              value: fusion-forge-postgresql
+            - name: DB_PORT
+              value: "5432"
+            - name: DB_NAME
+              value: fusion_forge
+            - name: DB_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: fusion-forge-db-secret
+                  key: username
+            - name: DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: fusion-forge-db-secret
+                  key: password
+            - name: INDEX_BACKEND_URL
+              value: http://fusion-index-backend.fusion.svc.cluster.local:8080
+            - name: K8S_NAMESPACE
+              value: fusion
+            - name: BUILDER_IMAGE
+              value: fusion-venv-builder:local
+            - name: AUTH_ENABLED
+              value: "false"
+          livenessProbe:
+            httpGet:
+              path: /q/health/live
+              port: 8080
+            initialDelaySeconds: 10
+            periodSeconds: 30
+          readinessProbe:
+            httpGet:
+              path: /q/health/ready
+              port: 8080
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          resources:
+            requests:
+              cpu: "250m"
+              memory: "128Mi"
+            limits:
+              cpu: "1000m"
+              memory: "256Mi"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: fusion-forge
+  namespace: fusion
+  labels:
+    app: fusion-forge-server
+spec:
+  selector:
+    app: fusion-forge-server
+  ports:
+    - name: http
+      port: 8080
+      targetPort: http
+---
+# Operator Deployment (entrypoint overridden to /operator)
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: fusion-forge-operator
+  namespace: fusion
+  labels:
+    app: fusion-forge-operator
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: fusion-forge-operator
+  template:
+    metadata:
+      labels:
+        app: fusion-forge-operator
+    spec:
+      serviceAccountName: fusion-forge-operator
+      containers:
+        - name: operator
+          image: fusion-forge:local
+          imagePullPolicy: Never
+          command: ["/operator"]
+          args:
+            - "--namespace=fusion"
+            - "--health-probe-bind-address=:8081"
+            - "--metrics-bind-address=:8082"
+          ports:
+            - name: metrics
+              containerPort: 8082
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: 8081
+            initialDelaySeconds: 10
+            periodSeconds: 30
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: 8081
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "64Mi"
+            limits:
+              cpu: "500m"
+              memory: "256Mi"

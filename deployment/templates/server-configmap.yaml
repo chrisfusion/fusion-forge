@@ -1,0 +1,21 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .Release.Name }}-server-config
+  namespace: {{ .Values.namespace }}
+  labels:
+    {{- include "fusion-forge.labels" . | nindent 4 }}
+    app.kubernetes.io/component: server
+data:
+  HTTP_PORT: "8080"
+  DB_HOST: {{ include "fusion-forge.dbHost" . | quote }}
+  DB_PORT: {{ include "fusion-forge.dbPort" . | quote }}
+  DB_NAME: {{ include "fusion-forge.dbName" . | quote }}
+  DB_USERNAME: {{ include "fusion-forge.dbUsername" . | quote }}
+  DB_SSLMODE: "disable"
+  K8S_NAMESPACE: {{ .Values.server.config.k8sNamespace | quote }}
+  BUILDER_IMAGE: {{ .Values.server.config.builderImage | quote }}
+  INDEX_BACKEND_URL: {{ .Values.server.config.indexBackendURL | quote }}
+  AUTH_ENABLED: {{ .Values.server.config.authEnabled | quote }}
+  AUTH_AUDIENCE: {{ .Values.server.config.authAudience | quote }}
+  AUTH_ALLOWED_SA: {{ .Values.server.config.authAllowedSAs | quote }}

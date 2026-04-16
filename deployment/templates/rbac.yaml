@@ -1,0 +1,113 @@
+# Role for the REST server: create/read CIBuild CRs, read pods and pod logs.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: fusion-forge-server-role
+  namespace: {{ .Values.namespace }}
+  labels:
+    {{- include "fusion-forge.labels" . | nindent 4 }}
+    app.kubernetes.io/component: server
+rules:
+  - apiGroups: ["build.fusion-platform.io"]
+    resources: ["cibuilds"]
+    verbs: ["create", "get", "list", "watch"]
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: [""]
+    resources: ["pods/log"]
+    verbs: ["get"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: fusion-forge-server-binding
+  namespace: {{ .Values.namespace }}
+  labels:
+    {{- include "fusion-forge.labels" . | nindent 4 }}
+    app.kubernetes.io/component: server
+subjects:
+  - kind: ServiceAccount
+    name: {{ include "fusion-forge.serverSAName" . }}
+    namespace: {{ .Values.namespace }}
+roleRef:
+  kind: Role
+  name: fusion-forge-server-role
+  apiGroup: rbac.authorization.k8s.io
+---
+# Role for the operator: full lifecycle on CIBuild CRs, Jobs, ConfigMaps.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: fusion-forge-operator-role
+  namespace: {{ .Values.namespace }}
+  labels:
+    {{- include "fusion-forge.labels" . | nindent 4 }}
+    app.kubernetes.io/component: operator
+rules:
+  - apiGroups: ["build.fusion-platform.io"]
+    resources: ["cibuilds"]
+    verbs: ["get", "list", "watch", "update", "patch"]
+  - apiGroups: ["build.fusion-platform.io"]
+    resources: ["cibuilds/status"]
+    verbs: ["get", "update", "patch"]
+  - apiGroups: ["batch"]
+    resources: ["jobs"]
+    verbs: ["create", "get", "list", "watch", "update", "patch", "delete"]
+  - apiGroups: [""]
+    resources: ["configmaps"]
+    verbs: ["create", "get", "list", "watch", "delete"]
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: [""]
+    resources: ["pods/log"]
+    verbs: ["get"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: fusion-forge-operator-binding
+  namespace: {{ .Values.namespace }}
+  labels:
+    {{- include "fusion-forge.labels" . | nindent 4 }}
+    app.kubernetes.io/component: operator
+subjects:
+  - kind: ServiceAccount
+    name: {{ include "fusion-forge.operatorSAName" . }}
+    namespace: {{ .Values.namespace }}
+roleRef:
+  kind: Role
+  name: fusion-forge-operator-role
+  apiGroup: rbac.authorization.k8s.io
+{{- if .Values.auth.enabled }}
+---
+# ClusterRole + binding — allows the server SA to call the TokenReview API.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: {{ include "fusion-forge.serverSAName" . }}-tokenreview
+  labels:
+    {{- include "fusion-forge.labels" . | nindent 4 }}
+    app.kubernetes.io/component: server
+rules:
+  - apiGroups: ["authentication.k8s.io"]
+    resources: ["tokenreviews"]
+    verbs: ["create"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: {{ include "fusion-forge.serverSAName" . }}-tokenreview
+  labels:
+    {{- include "fusion-forge.labels" . | nindent 4 }}
+    app.kubernetes.io/component: server
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: {{ include "fusion-forge.serverSAName" . }}-tokenreview
+subjects:
+  - kind: ServiceAccount
+    name: {{ include "fusion-forge.serverSAName" . }}
+    namespace: {{ .Values.namespace }}
+{{- end }}

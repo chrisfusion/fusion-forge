@@ -1,0 +1,17 @@
+fusion-forge has been deployed.
+
+  Server:   http://{{ include "fusion-forge.serverServiceName" . }}.{{ .Values.namespace }}.svc.cluster.local:8080
+  Operator: watching namespace {{ .Values.namespace }} for CIBuild CRs
+
+Health checks:
+  kubectl port-forward -n {{ .Values.namespace }} service/{{ include "fusion-forge.serverServiceName" . }} 18080:8080
+  curl http://localhost:18080/q/health/live
+  curl http://localhost:18080/q/health/ready
+
+Quick validate:
+  printf 'requests==2.31.0\n' > /tmp/req.txt
+  curl -F "name=test" -F "version=1.0.0" -F "requirements=@/tmp/req.txt" \
+       -X POST http://localhost:18080/api/v1/venvs/validate
+
+Auth: {{ if .Values.auth.enabled }}ENABLED (K8s SA TokenReview){{ else }}DISABLED{{ end }}
+PostgreSQL: {{ if .Values.postgresql.enabled }}bundled ({{ include "fusion-forge.postgresqlName" . }}){{ else }}external ({{ .Values.postgresql.external.host }}){{ end }}

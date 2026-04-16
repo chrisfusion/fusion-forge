@@ -1,22 +1,29 @@
-# Java / Maven
-target/
-*.class
-*.jar
-*.war
-.mvn/wrapper/maven-wrapper.jar
+# Go binaries and test artifacts
+bin/
+*.exe
+*.test
+coverage.out
+coverage.html
+*.out
 
-# IDE
+# Go workspace (local multi-module dev)
+go.work
+go.work.sum
+
+# IDE — IntelliJ / GoLand
 .idea/
 *.iml
+
+# IDE — VS Code
 .vscode/
 
-# Emacs
+# IDE — Emacs
 *~
 \#*\#
 /.emacs.desktop
 /.emacs.desktop.lock
 
-# Vim
+# IDE — Vim
 *.swp
 *.swo
 .netrwhist
@@ -24,12 +31,46 @@ target/
 # Claude Code (local tool settings — not team config)
 .claude/
 
-# Python venv (if created locally for tooling/scripts)
+# Python venv (if created locally for tooling)
 venv/
 .venv/
+__pycache__/
+*.pyc
+*.pyo
+
+# Java / Maven (leftover from old Quarkus version)
+target/
+*.jar
+*.war
+*.class
+
+# Build / Docker
+dist/
+
+# Helm — packaged charts and downloaded dependencies
+*.tgz
+deployment/charts/
+
+# Local Helm values overrides — may contain real passwords; never commit these
+values-local.yaml
+values-*.local.yaml
+*-local-values.yaml
+
+# TLS certificates and private keys
+*.pem
+*.key
+*.crt
+*.p12
+*.jks
+*.pfx
+
+# kubeconfig files saved locally
+kubeconfig
+*.kubeconfig
 
 # Common
 .env
 .env.*
 *.log
 .DS_Store
+Thumbs.db

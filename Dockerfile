@@ -1,24 +1,32 @@
-# Build verification Dockerfile
-# Stage 1: build with Maven
-FROM maven:3.9-eclipse-temurin-21 AS build
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Build stage: compiles both the REST server and the operator binary.
+FROM golang:1.25-alpine AS builder
 
-WORKDIR /app
-COPY pom.xml .
-# Download dependencies first (layer cache)
-RUN mvn dependency:go-offline -q
+WORKDIR /workspace
 
-COPY src/ src/
-RUN mvn package -DskipTests -q
+COPY go.mod go.sum ./
+RUN go mod download
 
-# Stage 2: runtime
-FROM eclipse-temurin:21-jre-jammy
+COPY api/    api/
+COPY cmd/    cmd/
+COPY internal/ internal/
+COPY migrations/ migrations/
 
-WORKDIR /app
-COPY --from=build /app/target/quarkus-app/lib/ lib/
-COPY --from=build /app/target/quarkus-app/*.jar .
-COPY --from=build /app/target/quarkus-app/app/ app/
-COPY --from=build /app/target/quarkus-app/quarkus/ quarkus/
+RUN CGO_ENABLED=0 GOOS=linux go build -a -o server  ./cmd/server/
+RUN CGO_ENABLED=0 GOOS=linux go build -a -o operator ./cmd/operator/
 
-EXPOSE 8080
-ENV JAVA_OPTS="-Dquarkus.http.host=0.0.0.0 -Djava.util.logging.manager=org.jboss.logmanager.LogManager"
-ENTRYPOINT ["sh", "-c", "java ${JAVA_OPTS} -jar quarkus-run.jar"]
+# Runtime stage: minimal distroless image.
+FROM gcr.io/distroless/static:nonroot
+
+WORKDIR /
+
+COPY --from=builder /workspace/server   .
+COPY --from=builder /workspace/operator .
+# Embed migrations so the server binary can run them at startup.
+COPY --from=builder /workspace/migrations migrations/
+
+USER 65532:65532
+
+# Default entrypoint is the REST server.
+# Override with /operator for the operator Deployment.
+ENTRYPOINT ["/server"]

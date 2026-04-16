@@ -1,0 +1,187 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# =============================================================================
+# fusion-forge — Helm Values
+# =============================================================================
+
+# Kubernetes namespace — must match the fusion platform namespace
+namespace: fusion
+
+# Set to false if the namespace already exists (e.g. installed by another chart)
+createNamespace: false
+
+# -----------------------------------------------------------------------------
+# Server — REST API (cmd/server, port 8080)
+# -----------------------------------------------------------------------------
+server:
+  image:
+    repository: fusion-forge
+    tag: "local"
+    pullPolicy: IfNotPresent
+
+  replicas: 1
+
+  resources:
+    requests:
+      cpu: 250m
+      memory: 128Mi
+    limits:
+      cpu: "1"
+      memory: 256Mi
+
+  # Pod-level security context (spec.securityContext).
+  podSecurityContext:
+    runAsNonRoot: true
+    runAsUser: 65532
+    fsGroup: 65532
+
+  # Container-level security context.
+  containerSecurityContext:
+    allowPrivilegeEscalation: false
+    capabilities:
+      drop: ["ALL"]
+    readOnlyRootFilesystem: true
+
+  # Extra labels/annotations on the Deployment object (not pods).
+  deploymentLabels: {}
+  deploymentAnnotations: {}
+
+  # Extra labels/annotations on every pod.
+  podLabels: {}
+  podAnnotations: {}
+
+  config:
+    # Kubernetes namespace where CIBuild CRs and build Jobs are created.
+    k8sNamespace: fusion
+    # Builder pod image — must match what fusion-venv-builder:local was tagged as.
+    builderImage: fusion-venv-builder:local
+    # fusion-index base URL.
+    indexBackendURL: http://fusion-index-backend.fusion.svc.cluster.local:8080
+    # Set to "true" to require K8s SA bearer token auth on all /api/v1/** endpoints.
+    authEnabled: "false"
+    # If non-empty, the bearer token must have been issued for this audience.
+    authAudience: ""
+    # Comma-separated namespace/name list of allowed service accounts. Empty = any valid SA.
+    authAllowedSAs: ""
+
+# -----------------------------------------------------------------------------
+# Operator — CIBuild reconciler (cmd/operator)
+# -----------------------------------------------------------------------------
+operator:
+  image:
+    repository: fusion-forge
+    tag: "local"
+    pullPolicy: IfNotPresent
+
+  replicas: 1
+
+  resources:
+    requests:
+      cpu: 100m
+      memory: 64Mi
+    limits:
+      cpu: 500m
+      memory: 256Mi
+
+  # Pod-level security context.
+  podSecurityContext:
+    runAsNonRoot: true
+    runAsUser: 65532
+    fsGroup: 65532
+
+  # Container-level security context.
+  containerSecurityContext:
+    allowPrivilegeEscalation: false
+    capabilities:
+      drop: ["ALL"]
+    readOnlyRootFilesystem: true
+
+  # Extra labels/annotations on the Deployment object (not pods).
+  deploymentLabels: {}
+  deploymentAnnotations: {}
+
+  # Extra labels/annotations on every pod.
+  podLabels: {}
+  podAnnotations: {}
+
+# -----------------------------------------------------------------------------
+# Authentication — K8s SA TokenReview
+#
+# When enabled the server calls the cluster TokenReview API to validate every
+# request to /api/v1/**. Health probes are always public.
+# Requires a ClusterRole allowing tokenreviews (provisioned automatically).
+# -----------------------------------------------------------------------------
+auth:
+  enabled: false
+
+  # If non-empty, the bearer token must have been issued for this audience.
+  audience: ""
+
+  # Whitelist of service accounts allowed to call the API.
+  # Format: "namespace/name". Empty list = any valid SA token is accepted.
+  # Example:
+  #   allowedServiceAccounts:
+  #     - fusion/fusion-spectra
+  allowedServiceAccounts: []
+
+# -----------------------------------------------------------------------------
+# PostgreSQL — embedded StatefulSet or external
+#
+# Bundled (default):  postgresql.enabled: true
+# External:           postgresql.enabled: false  +  postgresql.external.*
+# -----------------------------------------------------------------------------
+postgresql:
+  enabled: true
+
+  auth:
+    database: fusion_forge
+    username: fusion
+    password: "fusion"          # override in production — or use existingSecret
+    existingSecret: ""          # if set, password above is ignored; key must be "password"
+
+  persistence:
+    enabled: true
+    size: 2Gi
+
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+
+  # Pod-level security context for the PostgreSQL pod.
+  # postgres:16-alpine runs as UID 70 (user "postgres").
+  podSecurityContext:
+    runAsNonRoot: true
+    runAsUser: 70
+    fsGroup: 70
+
+  # Container-level security context for PostgreSQL.
+  # readOnlyRootFilesystem is intentionally omitted — postgres writes lock files to /var/run/postgresql.
+  containerSecurityContext:
+    allowPrivilegeEscalation: false
+    capabilities:
+      drop: ["ALL"]
+
+  # External PostgreSQL — only used when enabled: false
+  external:
+    host: ""
+    port: 5432
+    database: fusion_forge
+    username: fusion
+    existingSecret: ""          # must contain key "password"
+    password: ""                # prefer existingSecret in production
+
+# -----------------------------------------------------------------------------
+# Ingress (optional)
+# -----------------------------------------------------------------------------
+ingress:
+  enabled: false
+  className: nginx
+  host: forge.fusion.local
+  annotations: {}
+    # nginx.ingress.kubernetes.io/proxy-body-size: "50m"
+  tls:
+    enabled: false
+    secretName: fusion-forge-tls
