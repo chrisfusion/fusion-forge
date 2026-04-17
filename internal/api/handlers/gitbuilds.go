@@ -6,7 +6,6 @@ package handlers
 import (
 	"errors"
 	"fmt"
-	"io"
 	"log"
 	"net/http"
 
@@ -17,32 +16,28 @@ import (
 	"k8s.io/client-go/kubernetes"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
+	corev1 "k8s.io/api/core/v1"
+
 	buildv1alpha1 "fusion-platform.io/fusion-forge/api/v1alpha1"
 	"fusion-platform.io/fusion-forge/internal/api/dto"
 	"fusion-platform.io/fusion-forge/internal/config"
 	"fusion-platform.io/fusion-forge/internal/db"
 	"fusion-platform.io/fusion-forge/internal/indexclient"
 	"fusion-platform.io/fusion-forge/internal/validation"
-
-	corev1 "k8s.io/api/core/v1"
 )
 
-const (
-	maxRequirementsBytes = 100 * 1024 // 100 KB
-)
-
-// VenvHandler handles all /api/v1/venvs endpoints.
-type VenvHandler struct {
+// GitBuildHandler handles all /api/v1/gitbuilds endpoints.
+type GitBuildHandler struct {
 	DB          *db.Queries
 	K8sCRClient client.Client
 	KubeClient  kubernetes.Interface
 	IndexClient *indexclient.Client
-	Rules       validation.Rules
+	GitRules    validation.GitRules
 	Cfg         *config.Config
 }
 
-// List handles GET /api/v1/venvs.
-func (h *VenvHandler) List(c *gin.Context) {
+// List handles GET /api/v1/gitbuilds.
+func (h *GitBuildHandler) List(c *gin.Context) {
 	page := parseIntDefault(c.Query("page"), 0)
 	pageSize := parseIntDefault(c.Query("pageSize"), 20)
 	if pageSize > 100 {
@@ -52,7 +47,7 @@ func (h *VenvHandler) List(c *gin.Context) {
 	params := db.ListParams{
 		Page:      page,
 		PageSize:  pageSize,
-		BuildType: "requirements",
+		BuildType: "git",
 		Status:    c.Query("status"),
 		Name:      c.Query("name"),
 		CreatorID: c.Query("creatorId"),
@@ -83,29 +78,21 @@ func (h *VenvHandler) List(c *gin.Context) {
 	})
 }
 
-// Create handles POST /api/v1/venvs.
-func (h *VenvHandler) Create(c *gin.Context) {
-	var req dto.CreateVenvRequest
+// Create handles POST /api/v1/gitbuilds.
+func (h *GitBuildHandler) Create(c *gin.Context) {
+	var req dto.CreateGitBuildRequest
 	if err := c.ShouldBind(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
-
-	requirementsTxt, ok := readRequirementsFile(c, req)
-	if !ok {
-		return
-	}
-
-	result := validation.Validate(requirementsTxt, h.Rules)
-	if !result.Valid {
-		c.JSON(http.StatusBadRequest, dto.FromValidationResult(result))
-		return
+	if req.RepoRef == "" {
+		req.RepoRef = "main"
 	}
 
 	ctx := c.Request.Context()
 
 	if _, err := h.DB.GetVenvBuildByNameAndVersion(ctx, req.Name, req.Version); err == nil {
-		c.JSON(http.StatusConflict, gin.H{"error": fmt.Sprintf("venv '%s:%s' already exists", req.Name, req.Version)})
+		c.JSON(http.StatusConflict, gin.H{"error": fmt.Sprintf("git build '%s:%s' already exists", req.Name, req.Version)})
 		return
 	} else if !errors.Is(err, pgx.ErrNoRows) {
 		internalError(c, err)
@@ -138,27 +125,34 @@ func (h *VenvHandler) Create(c *gin.Context) {
 
 	desc := strPtr(req.Description)
 	creator := strPtr(callerUsername(c))
+	entrypoint := strPtr(req.EntrypointFile)
 	artifactVersion := req.Version
-	buildID, err := h.DB.CreateVenvBuild(ctx, db.CreateParams{
+	buildID, err := h.DB.CreateGitBuild(ctx, db.CreateGitBuildParams{
 		Name:                 req.Name,
 		Version:              req.Version,
 		Description:          desc,
 		CreatorID:            creator,
+		RepoURL:              req.RepoURL,
+		RepoRef:              req.RepoRef,
+		EntrypointFile:       entrypoint,
 		IndexArtifactID:      &artifactID,
 		IndexArtifactVersion: &artifactVersion,
 	})
 	if err != nil {
 		if isUniqueViolation(err) {
-			c.JSON(http.StatusConflict, gin.H{"error": fmt.Sprintf("venv '%s:%s' already exists", req.Name, req.Version)})
+			c.JSON(http.StatusConflict, gin.H{"error": fmt.Sprintf("git build '%s:%s' already exists", req.Name, req.Version)})
 		} else {
 			internalError(c, err)
 		}
 		return
 	}
 
-	ciBuildName := fmt.Sprintf("forge-venv-%d", buildID)
+	ciBuildName := fmt.Sprintf("forge-git-%d", buildID)
 	if err := h.DB.UpdateCIBuildName(ctx, buildID, ciBuildName); err != nil {
-		log.Printf("forge: update ci_build_name for build %d: %v", buildID, err)
+		log.Printf("forge: update ci_build_name for git build %d: %v", buildID, err)
+		_ = h.DB.UpdateStatus(ctx, buildID, "FAILED")
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to record build name"})
+		return
 	}
 
 	ciBuild := buildv1alpha1.CIBuild{
@@ -169,18 +163,23 @@ func (h *VenvHandler) Create(c *gin.Context) {
 		Spec: buildv1alpha1.CIBuildSpec{
 			BuilderImage:    h.Cfg.BuilderImage,
 			IndexBackendURL: h.Cfg.IndexBackendURL,
-			BuildType:       "requirements",
+			BuildType:       "git",
 			ArtifactName:    req.Name,
 			ArtifactVersion: req.Version,
 			Description:     req.Description,
-			ConfigData: map[string]string{
-				"requirements.txt": requirementsTxt,
+			GitSource: &buildv1alpha1.GitSourceSpec{
+				URL:            req.RepoURL,
+				Ref:            req.RepoRef,
+				EntrypointFile: req.EntrypointFile,
 			},
+			ConfigData: map[string]string{},
 			Env: []corev1.EnvVar{
 				{Name: "ARTIFACT_ID", Value: fmt.Sprintf("%d", artifactID)},
 				{Name: "ARTIFACT_VERSION", Value: req.Version},
 				{Name: "VENV_NAME", Value: req.Name},
-				{Name: "BUILD_TYPE", Value: "requirements"},
+				{Name: "BUILD_TYPE", Value: "git"},
+				{Name: "REQUIRE_PYPROJECT_TOML", Value: boolStr(h.GitRules.RequirePyprojectToml)},
+				{Name: "REQUIRE_SRC_DIR", Value: boolStr(h.GitRules.RequireSrcDir)},
 			},
 		},
 	}
@@ -199,18 +198,58 @@ func (h *VenvHandler) Create(c *gin.Context) {
 	c.JSON(http.StatusAccepted, dto.ToResponse(build))
 }
 
-// Validate handles POST /api/v1/venvs/validate.
-func (h *VenvHandler) Validate(c *gin.Context) {
-	var req dto.CreateVenvRequest
+// Validate handles POST /api/v1/gitbuilds/validate.
+// It validates the request format and checks for conflicts in the DB and fusion-index.
+// Repository structure (pyproject.toml, src/) is validated by the builder binary after cloning.
+func (h *GitBuildHandler) Validate(c *gin.Context) {
+	var req dto.CreateGitBuildRequest
 	if err := c.ShouldBind(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
-	requirementsTxt, ok := readRequirementsFile(c, req)
-	if !ok {
+	if req.RepoRef == "" {
+		req.RepoRef = "main"
+	}
+
+	ctx := c.Request.Context()
+	var violations []validation.Violation
+
+	// Check DB for existing build with same name+version.
+	if _, err := h.DB.GetVenvBuildByNameAndVersion(ctx, req.Name, req.Version); err == nil {
+		violations = append(violations, validation.Violation{
+			Line:    0,
+			Content: fmt.Sprintf("%s:%s", req.Name, req.Version),
+			Message: fmt.Sprintf("a build for '%s:%s' already exists", req.Name, req.Version),
+		})
+	} else if !errors.Is(err, pgx.ErrNoRows) {
+		internalError(c, err)
 		return
 	}
-	result := validation.Validate(requirementsTxt, h.Rules)
+
+	// Check fusion-index for existing version (read-only — no artifact is created here).
+	fullName := indexclient.ArtifactFullName(req.Name)
+	artifactID, found, err := h.IndexClient.FindArtifact(ctx, fullName)
+	if err != nil {
+		log.Printf("forge: validate git build — find artifact %q: %v", fullName, err)
+		internalError(c, err)
+		return
+	}
+	if found {
+		exists, err := h.IndexClient.VersionExists(ctx, artifactID, req.Version)
+		if err != nil {
+			internalError(c, err)
+			return
+		}
+		if exists {
+			violations = append(violations, validation.Violation{
+				Line:    0,
+				Content: fmt.Sprintf("%s:%s", req.Name, req.Version),
+				Message: fmt.Sprintf("version %s already exists for %s in registry", req.Version, req.Name),
+			})
+		}
+	}
+
+	result := validation.Result{Valid: len(violations) == 0, Violations: violations}
 	resp := dto.FromValidationResult(result)
 	if result.Valid {
 		c.JSON(http.StatusOK, resp)
@@ -219,8 +258,8 @@ func (h *VenvHandler) Validate(c *gin.Context) {
 	}
 }
 
-// Get handles GET /api/v1/venvs/:id. Lazily syncs CIBuild CR status to the DB row.
-func (h *VenvHandler) Get(c *gin.Context) {
+// Get handles GET /api/v1/gitbuilds/:id. Lazily syncs CIBuild CR status to the DB row.
+func (h *GitBuildHandler) Get(c *gin.Context) {
 	id, ok := pathID(c)
 	if !ok {
 		return
@@ -229,14 +268,14 @@ func (h *VenvHandler) Get(c *gin.Context) {
 
 	build, err := h.DB.GetVenvBuild(ctx, id)
 	if err != nil {
-		notFoundOrInternal(c, err, fmt.Sprintf("venv build %d not found", id))
+		notFoundOrInternal(c, err, fmt.Sprintf("git build %d not found", id))
 		return
 	}
 
 	if build.CIBuildName != nil && (build.Status == "PENDING" || build.Status == "BUILDING") {
 		if newStatus, synced := syncStatusFromCR(ctx, h.K8sCRClient, h.Cfg.K8sNamespace, *build.CIBuildName); synced && newStatus != build.Status {
 			if err := h.DB.UpdateStatus(ctx, id, newStatus); err != nil {
-				log.Printf("forge: sync status for build %d: %v", id, err)
+				log.Printf("forge: sync status for git build %d: %v", id, err)
 			} else {
 				build.Status = newStatus
 			}
@@ -246,8 +285,8 @@ func (h *VenvHandler) Get(c *gin.Context) {
 	c.JSON(http.StatusOK, dto.ToResponse(build))
 }
 
-// GetLogs handles GET /api/v1/venvs/:id/logs.
-func (h *VenvHandler) GetLogs(c *gin.Context) {
+// GetLogs handles GET /api/v1/gitbuilds/:id/logs.
+func (h *GitBuildHandler) GetLogs(c *gin.Context) {
 	id, ok := pathID(c)
 	if !ok {
 		return
@@ -256,11 +295,11 @@ func (h *VenvHandler) GetLogs(c *gin.Context) {
 
 	build, err := h.DB.GetVenvBuild(ctx, id)
 	if err != nil {
-		notFoundOrInternal(c, err, fmt.Sprintf("venv build %d not found", id))
+		notFoundOrInternal(c, err, fmt.Sprintf("git build %d not found", id))
 		return
 	}
 	if build.CIBuildName == nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": fmt.Sprintf("no CIBuild CR found for build %d", id)})
+		c.JSON(http.StatusNotFound, gin.H{"error": fmt.Sprintf("no CIBuild CR found for git build %d", id)})
 		return
 	}
 
@@ -287,33 +326,4 @@ func (h *VenvHandler) GetLogs(c *gin.Context) {
 		return
 	}
 	c.Data(http.StatusOK, "text/plain; charset=utf-8", []byte(logs))
-}
-
-func readRequirementsFile(c *gin.Context, req dto.CreateVenvRequest) (string, bool) {
-	if req.Requirements == nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "requirements file is required"})
-		return "", false
-	}
-	if req.Requirements.Size == 0 {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "requirements file must not be empty"})
-		return "", false
-	}
-	if req.Requirements.Size > maxRequirementsBytes {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "requirements file exceeds maximum allowed size of 100 KB"})
-		return "", false
-	}
-
-	f, err := req.Requirements.Open()
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "cannot open uploaded file"})
-		return "", false
-	}
-	defer f.Close()
-
-	data, err := io.ReadAll(io.LimitReader(f, maxRequirementsBytes+1))
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "cannot read uploaded file"})
-		return "", false
-	}
-	return string(data), true
 }

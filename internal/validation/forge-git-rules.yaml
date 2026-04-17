@@ -1,0 +1,9 @@
+# fusion-forge git build structure rules.
+# Controls which repository layout checks the builder enforces before building.
+# Override at runtime by setting FORGE_GIT_RULES_FILE to a custom YAML path.
+
+# require-pyproject-toml: the repository root must contain a pyproject.toml.
+require-pyproject-toml: true
+
+# require-src-dir: the repository root must contain a src/ directory.
+require-src-dir: true

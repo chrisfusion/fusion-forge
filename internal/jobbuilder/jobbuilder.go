@@ -32,6 +32,8 @@ func JobName(ciBuildName string) string {
 
 // BuildConfigMap creates a ConfigMap that holds the CIBuild's configData files.
 // The ConfigMap is owned by the CIBuild CR so it is garbage-collected on deletion.
+// For git builds configData is empty; the ConfigMap is still created as a no-op placeholder
+// so the operator's ownership and cleanup logic remains uniform across build types.
 func BuildConfigMap(ciBuild *buildv1alpha1.CIBuild) *corev1.ConfigMap {
 	return &corev1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{
@@ -48,11 +50,13 @@ func BuildConfigMap(ciBuild *buildv1alpha1.CIBuild) *corev1.ConfigMap {
 
 // BuildJob creates the batch/v1 Job that runs the builder container.
 // The Job is owned by the CIBuild CR so it is garbage-collected on deletion.
+// For git builds (BuildType=="git") the GitSource fields are injected as env vars and
+// the ConfigMap volume/mounts are omitted because there are no workspace files to mount.
 func BuildJob(ciBuild *buildv1alpha1.CIBuild, configMapName string) *batchv1.Job {
 	backoffLimit := int32(0)
 	ttl := int32(86400) // 24 h
 
-	// Build volume mounts — one per key in ConfigData.
+	// Build volume mounts — one per key in ConfigData (requirements builds only).
 	var mounts []corev1.VolumeMount
 	for filename := range ciBuild.Spec.ConfigData {
 		mounts = append(mounts, corev1.VolumeMount{
@@ -67,16 +71,42 @@ func BuildJob(ciBuild *buildv1alpha1.CIBuild, configMapName string) *batchv1.Job
 	baseEnv := []corev1.EnvVar{
 		{Name: "INDEX_BACKEND_URL", Value: ciBuild.Spec.IndexBackendURL},
 	}
+	// For git builds inject GitSource fields as env vars so the builder binary can read them.
+	if ciBuild.Spec.BuildType == "git" && ciBuild.Spec.GitSource != nil {
+		gs := ciBuild.Spec.GitSource
+		baseEnv = append(baseEnv,
+			corev1.EnvVar{Name: "GIT_REPO_URL", Value: gs.URL},
+			corev1.EnvVar{Name: "GIT_REF", Value: gs.Ref},
+			corev1.EnvVar{Name: "ENTRYPOINT_FILE", Value: gs.EntrypointFile},
+		)
+	}
 	env := append(baseEnv, ciBuild.Spec.Env...)
+
+	// Only declare the ConfigMap volume when there are files to mount.
+	var volumes []corev1.Volume
+	if len(ciBuild.Spec.ConfigData) > 0 {
+		volumes = []corev1.Volume{
+			{
+				Name: "build-config",
+				VolumeSource: corev1.VolumeSource{
+					ConfigMap: &corev1.ConfigMapVolumeSource{
+						LocalObjectReference: corev1.LocalObjectReference{
+							Name: configMapName,
+						},
+					},
+				},
+			},
+		}
+	}
 
 	return &batchv1.Job{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      JobName(ciBuild.Name),
 			Namespace: ciBuild.Namespace,
 			Labels: map[string]string{
-				labelManagedByKey:           labelManagedByValue,
+				labelManagedByKey:             labelManagedByValue,
 				"app.kubernetes.io/component": "ci-builder",
-				labelBuildIDKey:             ciBuild.Name,
+				labelBuildIDKey:               ciBuild.Name,
 			},
 			Annotations: map[string]string{
 				"build.fusion-platform.io/artifact": ciBuild.Spec.ArtifactName + ":" + ciBuild.Spec.ArtifactVersion,
@@ -113,18 +143,7 @@ func BuildJob(ciBuild *buildv1alpha1.CIBuild, configMapName string) *batchv1.Job
 							},
 						},
 					},
-					Volumes: []corev1.Volume{
-						{
-							Name: "build-config",
-							VolumeSource: corev1.VolumeSource{
-								ConfigMap: &corev1.ConfigMapVolumeSource{
-									LocalObjectReference: corev1.LocalObjectReference{
-										Name: configMapName,
-									},
-								},
-							},
-						},
-					},
+					Volumes: volumes,
 				},
 			},
 		},

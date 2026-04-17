@@ -66,6 +66,23 @@ type versionListResponse struct {
 
 // --- API methods --------------------------------------------------------------
 
+// FindArtifact looks up an artifact by full_name. Returns (id, true, nil) when found,
+// (0, false, nil) when absent, or (0, false, err) on a request failure.
+// It does not create the artifact and has no side effects.
+func (c *Client) FindArtifact(ctx context.Context, fullName string) (int64, bool, error) {
+	listURL := c.baseURL + "/api/v1/artifacts?name=" + url.QueryEscape(fullName)
+	var list artifactListResponse
+	if err := c.getJSON(ctx, listURL, &list); err != nil {
+		return 0, false, fmt.Errorf("list artifacts: %w", err)
+	}
+	for _, a := range list.Items {
+		if a.FullName == fullName {
+			return a.ID, true, nil
+		}
+	}
+	return 0, false, nil
+}
+
 // FindOrCreateArtifact looks up an artifact by full_name (prefix match) and creates it
 // if it does not exist. Returns the artifact ID.
 func (c *Client) FindOrCreateArtifact(ctx context.Context, fullName, description string) (int64, error) {

@@ -11,17 +11,22 @@ import (
 )
 
 // VenvBuildResponse is the JSON representation of a VenvBuild.
+// Git-specific fields (RepoURL, RepoRef, EntrypointFile) are omitted for requirements builds.
 type VenvBuildResponse struct {
 	ID                   int64      `json:"id"`
 	Name                 string     `json:"name"`
 	Version              string     `json:"version"`
 	Description          *string    `json:"description"`
 	Status               string     `json:"status"`
+	BuildType            string     `json:"buildType"`
 	CreatorID            *string    `json:"creatorId"`
 	CreatorEmail         *string    `json:"creatorEmail"`
 	IndexArtifactID      *int64     `json:"indexArtifactId"`
 	IndexArtifactVersion *string    `json:"indexArtifactVersion"`
 	CIBuildName          *string    `json:"ciBuildName"`
+	RepoURL              *string    `json:"repoUrl,omitempty"`
+	RepoRef              *string    `json:"repoRef,omitempty"`
+	EntrypointFile       *string    `json:"entrypointFile,omitempty"`
 	CreatedAt            time.Time  `json:"createdAt"`
 	UpdatedAt            time.Time  `json:"updatedAt"`
 }
@@ -34,17 +39,21 @@ func ToResponse(b db.VenvBuild) VenvBuildResponse {
 		Version:              b.Version,
 		Description:          b.Description,
 		Status:               b.Status,
+		BuildType:            b.BuildType,
 		CreatorID:            b.CreatorID,
 		CreatorEmail:         b.CreatorEmail,
 		IndexArtifactID:      b.IndexArtifactID,
 		IndexArtifactVersion: b.IndexArtifactVersion,
 		CIBuildName:          b.CIBuildName,
+		RepoURL:              b.RepoURL,
+		RepoRef:              b.RepoRef,
+		EntrypointFile:       b.EntrypointFile,
 		CreatedAt:            b.CreatedAt,
 		UpdatedAt:            b.UpdatedAt,
 	}
 }
 
-// PageResponse is the paginated list response for GET /api/v1/venvs.
+// PageResponse is the paginated list response for GET /api/v1/venvs and GET /api/v1/gitbuilds.
 type PageResponse struct {
 	Items    []VenvBuildResponse `json:"items"`
 	Total    int64               `json:"total"`
@@ -52,7 +61,7 @@ type PageResponse struct {
 	PageSize int                 `json:"pageSize"`
 }
 
-// ValidationResponse is the body for POST /api/v1/venvs/validate.
+// ValidationResponse is the body for POST /api/v1/venvs/validate and POST /api/v1/gitbuilds/validate.
 type ValidationResponse struct {
 	Valid      bool                   `json:"valid"`
 	Violations []validation.Violation `json:"violations"`

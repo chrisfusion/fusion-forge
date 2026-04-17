@@ -16,7 +16,7 @@ RUN go mod init forge-builder && \
 FROM python:3.12-slim-bookworm
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    ca-certificates \
+    ca-certificates git \
     && rm -rf /var/lib/apt/lists/*
 
 COPY --from=go-builder /forge-builder /usr/local/bin/forge-builder

@@ -19,6 +19,22 @@ const (
 	CIBuildPhaseFailed    CIBuildPhase = "Failed"
 )
 
+// GitSourceSpec specifies the git repository to clone for a git build.
+type GitSourceSpec struct {
+	// URL is the https git clone URL of the repository.
+	URL string `json:"url"`
+
+	// Ref is the branch or tag to check out. Defaults to "main".
+	// +optional
+	Ref string `json:"ref,omitempty"`
+
+	// EntrypointFile is the name of the optional Python file at the repository root that
+	// acts as the runnable entry point. When set, the file is uploaded to fusion-index
+	// as a second artefact alongside the venv archive.
+	// +optional
+	EntrypointFile string `json:"entrypointFile,omitempty"`
+}
+
 // CIBuildSpec defines the desired state of a CIBuild.
 // ConfigData holds arbitrary filename→content pairs that are mounted as a ConfigMap
 // volume at /workspace inside the builder pod. This keeps the spec generic so future
@@ -40,8 +56,19 @@ type CIBuildSpec struct {
 	// +optional
 	Description string `json:"description,omitempty"`
 
+	// BuildType identifies the build mode.
+	// "requirements" (default) installs from a requirements.txt supplied via ConfigData.
+	// "git" clones a repository and builds from pyproject.toml.
+	// +kubebuilder:validation:Enum=requirements;git
+	// +optional
+	BuildType string `json:"buildType,omitempty"`
+
+	// GitSource specifies the repository to clone. Required when BuildType is "git".
+	// +optional
+	GitSource *GitSourceSpec `json:"gitSource,omitempty"`
+
 	// ConfigData holds filename→content pairs mounted as a ConfigMap volume at /workspace.
-	// For venv builds this contains "requirements.txt".
+	// For requirements builds this contains "requirements.txt"; empty for git builds.
 	ConfigData map[string]string `json:"configData"`
 
 	// Env contains additional environment variables injected into the builder pod.
@@ -84,6 +111,7 @@ type CIBuildStatus struct {
 // +kubebuilder:resource:shortName=cib
 // +kubebuilder:printcolumn:name="Artifact",type=string,JSONPath=".spec.artifactName"
 // +kubebuilder:printcolumn:name="Version",type=string,JSONPath=".spec.artifactVersion"
+// +kubebuilder:printcolumn:name="Type",type=string,JSONPath=".spec.buildType"
 // +kubebuilder:printcolumn:name="Phase",type=string,JSONPath=".status.phase"
 // +kubebuilder:printcolumn:name="Age",type=date,JSONPath=".metadata.creationTimestamp"
 

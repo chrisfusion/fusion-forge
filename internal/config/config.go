@@ -36,6 +36,9 @@ type Config struct {
 
 	// RulesFile is the path to forge-rules.yaml. Empty = use embedded default.
 	RulesFile string
+
+	// GitRulesFile is the path to forge-git-rules.yaml. Empty = use embedded default.
+	GitRulesFile string
 }
 
 // Load reads configuration from environment variables with sensible defaults.
@@ -56,6 +59,7 @@ func Load() *Config {
 		AuthAudience:    getEnv("AUTH_AUDIENCE", ""),
 		AuthAllowedSAs:  splitCSV(getEnv("AUTH_ALLOWED_SA", "")),
 		RulesFile:       getEnv("FORGE_RULES_FILE", ""),
+		GitRulesFile:    getEnv("FORGE_GIT_RULES_FILE", ""),
 	}
 }
 

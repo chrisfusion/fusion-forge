@@ -26,17 +26,34 @@ type VenvBuild struct {
 	IndexArtifactID      *int64
 	IndexArtifactVersion *string
 	CIBuildName          *string
+	BuildType            string
+	RepoURL              *string
+	RepoRef              *string
+	EntrypointFile       *string
 	CreatedAt            time.Time
 	UpdatedAt            time.Time
 }
 
-// CreateParams holds the fields for creating a new VenvBuild row.
+// CreateParams holds the fields for creating a new requirements-type VenvBuild row.
 type CreateParams struct {
 	Name                 string
 	Version              string
 	Description          *string
 	CreatorID            *string
 	CreatorEmail         *string
+	IndexArtifactID      *int64
+	IndexArtifactVersion *string
+}
+
+// CreateGitBuildParams holds the fields for creating a new git-type VenvBuild row.
+type CreateGitBuildParams struct {
+	Name                 string
+	Version              string
+	Description          *string
+	CreatorID            *string
+	RepoURL              string
+	RepoRef              string
+	EntrypointFile       *string
 	IndexArtifactID      *int64
 	IndexArtifactVersion *string
 }
@@ -48,6 +65,7 @@ type ListParams struct {
 	Status    string
 	Name      string
 	CreatorID string
+	BuildType string
 	SortBy    string
 	SortDir   string
 }
@@ -63,7 +81,9 @@ func New(pool *pgxpool.Pool) *Queries {
 }
 
 const scanCols = ` id, name, version, description, status, creator_id, creator_email,
-	index_artifact_id, index_artifact_version, ci_build_name, created_at, updated_at `
+	index_artifact_id, index_artifact_version, ci_build_name,
+	build_type, repo_url, repo_ref, entrypoint_file,
+	created_at, updated_at `
 
 func scan(row pgx.Row) (VenvBuild, error) {
 	var b VenvBuild
@@ -71,23 +91,44 @@ func scan(row pgx.Row) (VenvBuild, error) {
 		&b.ID, &b.Name, &b.Version, &b.Description, &b.Status,
 		&b.CreatorID, &b.CreatorEmail,
 		&b.IndexArtifactID, &b.IndexArtifactVersion,
-		&b.CIBuildName, &b.CreatedAt, &b.UpdatedAt,
+		&b.CIBuildName,
+		&b.BuildType, &b.RepoURL, &b.RepoRef, &b.EntrypointFile,
+		&b.CreatedAt, &b.UpdatedAt,
 	)
 	return b, err
 }
 
-// CreateVenvBuild inserts a new PENDING build row and returns the generated ID.
+// CreateVenvBuild inserts a new PENDING requirements build row and returns the generated ID.
 func (q *Queries) CreateVenvBuild(ctx context.Context, p CreateParams) (int64, error) {
 	const query = `
 		INSERT INTO venv_build
 			(name, version, description, status, creator_id, creator_email,
-			 index_artifact_id, index_artifact_version, created_at, updated_at)
-		VALUES ($1,$2,$3,'PENDING',$4,$5,$6,$7,NOW(),NOW())
+			 index_artifact_id, index_artifact_version, build_type, created_at, updated_at)
+		VALUES ($1,$2,$3,'PENDING',$4,$5,$6,$7,'requirements',NOW(),NOW())
 		RETURNING id`
 	var id int64
 	err := q.pool.QueryRow(ctx, query,
 		p.Name, p.Version, p.Description, p.CreatorID, p.CreatorEmail,
 		p.IndexArtifactID, p.IndexArtifactVersion,
+	).Scan(&id)
+	return id, err
+}
+
+// CreateGitBuild inserts a new PENDING git build row and returns the generated ID.
+func (q *Queries) CreateGitBuild(ctx context.Context, p CreateGitBuildParams) (int64, error) {
+	const query = `
+		INSERT INTO venv_build
+			(name, version, description, status, creator_id,
+			 index_artifact_id, index_artifact_version,
+			 build_type, repo_url, repo_ref, entrypoint_file,
+			 created_at, updated_at)
+		VALUES ($1,$2,$3,'PENDING',$4,$5,$6,'git',$7,$8,$9,NOW(),NOW())
+		RETURNING id`
+	var id int64
+	err := q.pool.QueryRow(ctx, query,
+		p.Name, p.Version, p.Description, p.CreatorID,
+		p.IndexArtifactID, p.IndexArtifactVersion,
+		p.RepoURL, p.RepoRef, p.EntrypointFile,
 	).Scan(&id)
 	return id, err
 }
@@ -174,6 +215,11 @@ func buildWhere(p ListParams) (string, []interface{}) {
 	var conds []string
 	var args []interface{}
 	n := 1
+	if p.BuildType != "" {
+		conds = append(conds, fmt.Sprintf("build_type=$%d", n))
+		args = append(args, p.BuildType)
+		n++
+	}
 	if p.Status != "" {
 		conds = append(conds, fmt.Sprintf("status=$%d", n))
 		args = append(args, p.Status)

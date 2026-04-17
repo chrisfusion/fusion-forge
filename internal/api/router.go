@@ -27,6 +27,7 @@ func NewRouter(
 	kubeClient kubernetes.Interface,
 	indexClient *indexclient.Client,
 	rules validation.Rules,
+	gitRules validation.GitRules,
 	cfg *config.Config,
 ) *gin.Engine {
 	r := gin.New()
@@ -54,6 +55,15 @@ func NewRouter(
 		Cfg:         cfg,
 	}
 
+	gh := &handlers.GitBuildHandler{
+		DB:          queries,
+		K8sCRClient: k8sCRClient,
+		KubeClient:  kubeClient,
+		IndexClient: indexClient,
+		GitRules:    gitRules,
+		Cfg:         cfg,
+	}
+
 	v1 := r.Group("/api/v1")
 	v1.Use(middleware.NewAuthMiddleware(cfg))
 
@@ -62,6 +72,12 @@ func NewRouter(
 	v1.POST("/venvs/validate", vh.Validate)
 	v1.GET("/venvs/:id", vh.Get)
 	v1.GET("/venvs/:id/logs", vh.GetLogs)
+
+	v1.GET("/gitbuilds", gh.List)
+	v1.POST("/gitbuilds", gh.Create)
+	v1.POST("/gitbuilds/validate", gh.Validate)
+	v1.GET("/gitbuilds/:id", gh.Get)
+	v1.GET("/gitbuilds/:id/logs", gh.GetLogs)
 
 	return r
 }

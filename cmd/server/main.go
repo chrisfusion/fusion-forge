@@ -63,8 +63,12 @@ func main() {
 	log.Printf("forge: loaded validation rules (exactPin=%v, maxPkg=%d, banned=%d)",
 		rules.RequireExactPinning, rules.MaxPackages, len(rules.BannedPackages))
 
+	gitRules := validation.LoadGitRules(cfg.GitRulesFile)
+	log.Printf("forge: loaded git rules (requirePyproject=%v, requireSrc=%v)",
+		gitRules.RequirePyprojectToml, gitRules.RequireSrcDir)
+
 	// HTTP server
-	router := api.NewRouter(pool, queries, k8sCRClient, kubeClient, indexClient, rules, cfg)
+	router := api.NewRouter(pool, queries, k8sCRClient, kubeClient, indexClient, rules, gitRules, cfg)
 	addr := fmt.Sprintf(":%s", cfg.Port)
 	log.Printf("starting fusion-forge server on %s", addr)
 	if err := router.Run(addr); err != nil {
@@ -85,7 +89,6 @@ func runMigrations(dbURL string) {
 }
 
 // buildK8sClients sets up the controller-runtime CR client and the typed kubernetes client.
-// Both are required for the server to create CIBuild CRs and read pod logs.
 func buildK8sClients() (client.Client, kubernetes.Interface) {
 	k8sCfg, err := ctrl.GetConfig()
 	if err != nil {
