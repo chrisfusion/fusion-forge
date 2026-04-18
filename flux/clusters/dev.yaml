@@ -1,0 +1,34 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Apply this file to the dev cluster after Flux bootstrap:
+#   kubectl apply -f flux/clusters/dev.yaml
+# Or pass --path=flux/clusters/dev during flux bootstrap (see flux/README.md).
+---
+# Shared sources: HelmRepository, ImageRepository, ImagePolicy, ImageUpdateAutomation.
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  name: fusion-forge-sources
+  namespace: flux-system
+spec:
+  interval: 10m
+  path: ./flux/sources
+  prune: true
+  sourceRef:
+    kind: GitRepository
+    name: flux-system
+---
+# Dev environment: Namespace + HelmRelease for dev-fusion.
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  name: fusion-forge-dev
+  namespace: flux-system
+spec:
+  interval: 10m
+  path: ./flux/environments/dev
+  prune: true
+  sourceRef:
+    kind: GitRepository
+    name: flux-system
+  dependsOn:
+    - name: fusion-forge-sources

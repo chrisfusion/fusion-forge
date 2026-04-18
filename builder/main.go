@@ -16,7 +16,10 @@
 //
 //	GIT_REPO_URL            HTTPS URL of the git repository to clone.
 //	GIT_REF                 Branch or tag to check out (default: "main").
-//	ENTRYPOINT_FILE         Optional: name of a Python file at the repo root to upload
+//	GIT_PROJECT_DIR         Optional: relative path to the Python project within the repo
+//	                        (monorepo support). When set, pyproject.toml, src/, and
+//	                        ENTRYPOINT_FILE are resolved relative to this directory.
+//	ENTRYPOINT_FILE         Optional: name of a Python file at the project root to upload
 //	                        as a second artefact alongside the venv archive.
 //	REQUIRE_PYPROJECT_TOML  "true"/"false" — enforce pyproject.toml presence (default: "true").
 //	REQUIRE_SRC_DIR         "true"/"false" — enforce src/ directory presence (default: "true").
@@ -94,18 +97,27 @@ func buildFromRequirements(ctx context.Context, uploadURL, archiveName, archiveP
 // installs it into a venv, archives the venv, and uploads both the venv archive
 // and (optionally) the entrypoint file to fusion-index.
 func buildFromGit(ctx context.Context, uploadURL, archiveName, archivePath string) {
-	repoURL        := mustEnv("GIT_REPO_URL")
-	repoRef        := envDefault("GIT_REF", "main")
-	entrypointFile := envDefault("ENTRYPOINT_FILE", "")
+	repoURL          := mustEnv("GIT_REPO_URL")
+	repoRef          := envDefault("GIT_REF", "main")
+	projectDir       := envDefault("GIT_PROJECT_DIR", "")
+	entrypointFile   := envDefault("ENTRYPOINT_FILE", "")
 	requirePyproject := envDefault("REQUIRE_PYPROJECT_TOML", "true") == "true"
-	requireSrc      := envDefault("REQUIRE_SRC_DIR", "true") == "true"
+	requireSrc       := envDefault("REQUIRE_SRC_DIR", "true") == "true"
 
 	// Step 1: clone the repository.
 	log.Printf("[forge-builder] cloning %s @ %s", repoURL, repoRef)
 	run("git", "clone", "--single-branch", "--depth=1", "--branch", repoRef, repoURL, srcDir)
 
+	// projectRoot is the directory that contains pyproject.toml and src/.
+	// For monorepos this is a subdirectory of the clone; otherwise it is the clone root.
+	projectRoot := srcDir
+	if projectDir != "" {
+		projectRoot = filepath.Join(srcDir, projectDir)
+		log.Printf("[forge-builder] using project directory: %s", projectDir)
+	}
+
 	// Step 2: validate repository structure (fails the build early on bad layout).
-	validateGitStructure(srcDir, requirePyproject, requireSrc, entrypointFile)
+	validateGitStructure(projectRoot, requirePyproject, requireSrc, entrypointFile)
 
 	// Step 3: create the virtual environment.
 	log.Println("[forge-builder] creating virtual environment")
@@ -120,7 +132,7 @@ func buildFromGit(ctx context.Context, uploadURL, archiveName, archivePath strin
 	if err := os.MkdirAll(distDir, 0o755); err != nil {
 		log.Fatalf("[forge-builder] create dist dir: %v", err)
 	}
-	run(pip, "wheel", "--no-cache-dir", "-w", distDir, srcDir)
+	run(pip, "wheel", "--no-cache-dir", "-w", distDir, projectRoot)
 
 	// Step 5: install the wheel (pip resolves and installs all dependencies).
 	wheels, err := filepath.Glob(filepath.Join(distDir, "*.whl"))
@@ -135,8 +147,9 @@ func buildFromGit(ctx context.Context, uploadURL, archiveName, archivePath strin
 	archiveAndUpload(ctx, uploadURL, archiveName, archivePath)
 
 	// Step 7: upload the entrypoint file as a second artefact (if configured).
+	// The entrypoint path is relative to projectRoot, not to the repo root.
 	if entrypointFile != "" {
-		entrypointPath := filepath.Join(srcDir, entrypointFile)
+		entrypointPath := filepath.Join(projectRoot, entrypointFile)
 		fi, err := os.Stat(entrypointPath)
 		if err != nil {
 			log.Fatalf("[forge-builder] entrypoint file %q not found: %v", entrypointFile, err)

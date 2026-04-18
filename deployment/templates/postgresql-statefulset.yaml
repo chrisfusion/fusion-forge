@@ -8,6 +8,13 @@ metadata:
     {{- include "fusion-forge.labels" . | nindent 4 }}
     app: {{ include "fusion-forge.postgresqlName" . }}
     app.kubernetes.io/component: postgresql
+    {{- with .Values.postgresql.statefulsetLabels }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+  {{- with .Values.postgresql.statefulsetAnnotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
 spec:
   serviceName: {{ include "fusion-forge.postgresqlName" . }}
   replicas: 1
@@ -20,10 +27,33 @@ spec:
         app: {{ include "fusion-forge.postgresqlName" . }}
         {{- include "fusion-forge.labels" . | nindent 8 }}
         app.kubernetes.io/component: postgresql
+        {{- with .Values.postgresql.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      {{- with .Values.postgresql.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
     spec:
       serviceAccountName: default
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
       securityContext:
         {{- toYaml .Values.postgresql.podSecurityContext | nindent 8 }}
+      {{- with .Values.postgresql.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.postgresql.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.postgresql.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
       containers:
         - name: postgresql
           image: postgres:16-alpine

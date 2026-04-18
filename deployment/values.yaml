@@ -9,6 +9,13 @@ namespace: fusion
 # Set to false if the namespace already exists (e.g. installed by another chart)
 createNamespace: false
 
+# Image pull secrets applied to server, operator, and postgresql pods.
+# Builder Job pods inherit the secret via the fusion-forge-builder ServiceAccount.
+# Example:
+#   imagePullSecrets:
+#     - name: my-registry-secret
+imagePullSecrets: []
+
 # -----------------------------------------------------------------------------
 # Server — REST API (cmd/server, port 8080)
 # -----------------------------------------------------------------------------
@@ -48,6 +55,11 @@ server:
   # Extra labels/annotations on every pod.
   podLabels: {}
   podAnnotations: {}
+
+  # Node scheduling constraints.
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
 
   config:
     # Kubernetes namespace where CIBuild CRs and build Jobs are created.
@@ -102,6 +114,11 @@ operator:
   # Extra labels/annotations on every pod.
   podLabels: {}
   podAnnotations: {}
+
+  # Node scheduling constraints.
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
 
 # -----------------------------------------------------------------------------
 # Authentication — K8s SA TokenReview
@@ -163,6 +180,19 @@ postgresql:
     allowPrivilegeEscalation: false
     capabilities:
       drop: ["ALL"]
+
+  # Extra labels/annotations on the StatefulSet object (not pods).
+  statefulsetLabels: {}
+  statefulsetAnnotations: {}
+
+  # Extra labels/annotations on every pod.
+  podLabels: {}
+  podAnnotations: {}
+
+  # Node scheduling constraints.
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
 
   # External PostgreSQL — only used when enabled: false
   external:

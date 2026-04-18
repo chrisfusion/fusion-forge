@@ -1,0 +1,11 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Helm chart registry for all fusion-platform charts.
+# TODO: replace url with your actual chart registry URL.
+apiVersion: source.toolkit.fluxcd.io/v1
+kind: HelmRepository
+metadata:
+  name: fusion-platform
+  namespace: flux-system
+spec:
+  url: https://charts.example.com  # TODO
+  interval: 10m

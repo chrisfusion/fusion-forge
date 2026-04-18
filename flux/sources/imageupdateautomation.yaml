@@ -1,0 +1,35 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# ImageUpdateAutomation watches the ImagePolicies above and commits updated image tags
+# back to this repository whenever a new semver tag appears in the registry.
+# It patches any YAML value followed by a marker of the form:
+#   tag: "x.y.z" # {"$imagepolicy": "flux-system:<policy-name>:tag"}
+# TODO: set git.checkout.ref.branch and git.push.branch to your default branch name.
+apiVersion: image.toolkit.fluxcd.io/v1beta2
+kind: ImageUpdateAutomation
+metadata:
+  name: fusion-forge
+  namespace: flux-system
+spec:
+  interval: 30m
+  sourceRef:
+    kind: GitRepository
+    name: flux-system
+  git:
+    checkout:
+      ref:
+        branch: main  # TODO
+    commit:
+      author:
+        email: fluxbot@fusion-platform.io
+        name: Flux Bot
+      messageTemplate: |
+        chore: update fusion-forge image tags
+
+        {{range .Updated.Images -}}
+        - {{.}} updated to {{.Identifier}}
+        {{end -}}
+    push:
+      branch: main  # TODO
+  update:
+    path: ./flux/environments
+    strategy: Setters

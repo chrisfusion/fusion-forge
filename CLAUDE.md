@@ -84,6 +84,8 @@ k8s/
 migrations/
   000001_create_venv_build.up.sql
   000002_add_git_build_columns.up.sql  # adds build_type, repo_url, repo_ref, entrypoint_file
+  000003_add_metadata_source.up.sql   # adds metadata_source column ('manual'|'version'|'full')
+  000004_add_project_dir.up.sql       # adds project_dir column (optional monorepo subdirectory)
 Dockerfile                 # builds /server + /operator; default ENTRYPOINT is /server
 Makefile
 ```
@@ -201,6 +203,11 @@ status:
 - **CIBuild CR name prefixes**: `forge-venv-{id}` for requirements builds, `forge-git-{id}` for git builds — must stay distinct to avoid K8s name collisions
 - **`UpdateCIBuildName` is a hard failure path**: if the DB update to store the CR name fails, mark the build FAILED immediately and return 500 — do not proceed to create the CIBuild CR, as lazy sync will be permanently broken
 - **jobbuilder ConfigData guard**: volumes/mounts are only created when `len(Spec.ConfigData) > 0` — git builds pass empty ConfigData, so this guard prevents mounting a ConfigMap with no keys
+- **`metadata_source` three modes**: `"manual"` (default, name+version from request), `"version"` (name from request, version from pyproject.toml), `"full"` (both from pyproject.toml) — server fetches pyproject.toml via go-git in-memory clone before creating the DB row, so the DB record is always consistent
+- **`go-git` in-memory clone for pyproject.toml**: `internal/gitutil/pyproject.go` — tries tag ref first, then branch ref; uses `pelletier/go-toml/v2` (already an indirect dep) to parse `[project].name` and `[project].version`; dynamic versions (`dynamic = ["version"]`) are not supported
+- **Adding a field to git builds touches 8 layers**: dto/requests.go → gitbuilds handler (validate + wire) → db.go (struct + params + scanCols + scan + INSERT) → internal/gitutil/pyproject.go (if metadata-related) → api/v1alpha1/cibuild_types.go (GitSourceSpec) → config/crd/bases/ YAML (gitSource properties, manual edit) → jobbuilder (env var injection) → builder/main.go (env var read + use)
+- **`strPtr` in handlers/helpers.go already returns nil for empty string** — no need for a separate helper when storing optional string fields as `*string`
+- **`project_dir` monorepo support**: optional relative path within a repo; validated to reject absolute paths and `..` escapes; shifts the project root for pyproject.toml lookup (server-side), structure validation, wheel build, and entrypoint resolution (builder-side)
 
 ## Validation
 

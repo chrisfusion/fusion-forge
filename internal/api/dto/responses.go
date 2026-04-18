@@ -11,7 +11,7 @@ import (
 )
 
 // VenvBuildResponse is the JSON representation of a VenvBuild.
-// Git-specific fields (RepoURL, RepoRef, EntrypointFile) are omitted for requirements builds.
+// Git-specific fields (RepoURL, RepoRef, EntrypointFile, MetadataSource) are omitted for requirements builds.
 type VenvBuildResponse struct {
 	ID                   int64      `json:"id"`
 	Name                 string     `json:"name"`
@@ -27,6 +27,8 @@ type VenvBuildResponse struct {
 	RepoURL              *string    `json:"repoUrl,omitempty"`
 	RepoRef              *string    `json:"repoRef,omitempty"`
 	EntrypointFile       *string    `json:"entrypointFile,omitempty"`
+	MetadataSource       string     `json:"metadataSource,omitempty"`
+	ProjectDir           *string    `json:"projectDir,omitempty"`
 	CreatedAt            time.Time  `json:"createdAt"`
 	UpdatedAt            time.Time  `json:"updatedAt"`
 }
@@ -48,6 +50,8 @@ func ToResponse(b db.VenvBuild) VenvBuildResponse {
 		RepoURL:              b.RepoURL,
 		RepoRef:              b.RepoRef,
 		EntrypointFile:       b.EntrypointFile,
+		MetadataSource:       b.MetadataSource,
+		ProjectDir:           b.ProjectDir,
 		CreatedAt:            b.CreatedAt,
 		UpdatedAt:            b.UpdatedAt,
 	}

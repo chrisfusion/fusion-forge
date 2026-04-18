@@ -1,0 +1,27 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# ImagePolicy resources resolve the highest available semver tag from each ImageRepository.
+# ImageUpdateAutomation uses these policies to patch {"$imagepolicy": ...} markers in YAML.
+---
+apiVersion: image.toolkit.fluxcd.io/v1beta2
+kind: ImagePolicy
+metadata:
+  name: fusion-forge
+  namespace: flux-system
+spec:
+  imageRepositoryRef:
+    name: fusion-forge
+  policy:
+    semver:
+      range: ">=0.0.0"
+---
+apiVersion: image.toolkit.fluxcd.io/v1beta2
+kind: ImagePolicy
+metadata:
+  name: fusion-venv-builder
+  namespace: flux-system
+spec:
+  imageRepositoryRef:
+    name: fusion-venv-builder
+  policy:
+    semver:
+      range: ">=0.0.0"

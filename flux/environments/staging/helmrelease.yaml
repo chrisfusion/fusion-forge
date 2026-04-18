@@ -1,0 +1,61 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Staging environment — external PostgreSQL, auth enabled.
+# Pre-requisite: create the DB credentials secret before the first Helm install:
+#   kubectl create secret generic fusion-forge-db-secret \
+#     --from-literal=password=<password> \
+#     -n dev-staging-fusion
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: fusion-forge
+  namespace: dev-staging-fusion
+spec:
+  interval: 10m
+  targetNamespace: dev-staging-fusion
+  chart:
+    spec:
+      chart: fusion-forge
+      # Always install the highest published semver chart version.
+      version: ">=0.0.0"
+      sourceRef:
+        kind: HelmRepository
+        name: fusion-platform
+        namespace: flux-system
+      interval: 10m
+  install:
+    createNamespace: false
+  upgrade:
+    cleanupOnFail: true
+  values:
+    namespace: dev-staging-fusion
+    createNamespace: false
+
+    imagePullSecrets:
+      - name: registry-credentials  # pre-existing secret in dev-staging-fusion
+
+    server:
+      image:
+        repository: registry.example.com/fusion/fusion-forge  # TODO
+        tag: "0.1.0" # {"$imagepolicy": "flux-system:fusion-forge:tag"}
+        pullPolicy: IfNotPresent
+      config:
+        k8sNamespace: dev-staging-fusion
+        builderImage: registry.example.com/fusion/fusion-venv-builder:0.1.0 # {"$imagepolicy": "flux-system:fusion-venv-builder:tag"}
+        indexBackendURL: http://fusion-index-backend.dev-staging-fusion.svc.cluster.local:8080
+        authEnabled: "true"
+        authAllowedSAs: ""  # TODO: "dev-staging-fusion/your-service-account"
+
+    operator:
+      image:
+        repository: registry.example.com/fusion/fusion-forge  # TODO
+        tag: "0.1.0" # {"$imagepolicy": "flux-system:fusion-forge:tag"}
+        pullPolicy: IfNotPresent
+
+    postgresql:
+      enabled: false
+      external:
+        host: postgres-staging.example.com  # TODO
+        port: 5432
+        database: fusion_forge
+        username: fusion
+        existingSecret: fusion-forge-db-secret  # must exist in dev-staging-fusion

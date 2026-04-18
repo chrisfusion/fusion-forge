@@ -28,11 +28,18 @@ type GitSourceSpec struct {
 	// +optional
 	Ref string `json:"ref,omitempty"`
 
-	// EntrypointFile is the name of the optional Python file at the repository root that
+	// EntrypointFile is the name of the optional Python file at the project root that
 	// acts as the runnable entry point. When set, the file is uploaded to fusion-index
 	// as a second artefact alongside the venv archive.
 	// +optional
 	EntrypointFile string `json:"entrypointFile,omitempty"`
+
+	// ProjectDir is an optional relative path to the Python project within the repository.
+	// Use this for monorepos where multiple projects live in separate subdirectories.
+	// When set, pyproject.toml, src/, and the entrypoint file are resolved relative to
+	// this directory instead of the repository root.
+	// +optional
+	ProjectDir string `json:"projectDir,omitempty"`
 }
 
 // CIBuildSpec defines the desired state of a CIBuild.

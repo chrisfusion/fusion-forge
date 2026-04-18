@@ -67,6 +67,17 @@ func BuildJob(ciBuild *buildv1alpha1.CIBuild, configMapName string) *batchv1.Job
 		})
 	}
 
+	// Fixed baseline security context — satisfies the Kubernetes "baseline" Pod Security
+	// Standard. readOnlyRootFilesystem is intentionally not set because the builder writes
+	// venv, wheel, and archive artifacts to /workspace inside the container.
+	falseVal := false
+	builderSecurityContext := &corev1.SecurityContext{
+		AllowPrivilegeEscalation: &falseVal,
+		Capabilities: &corev1.Capabilities{
+			Drop: []corev1.Capability{"ALL"},
+		},
+	}
+
 	// Base env vars injected by the operator; Spec.Env adds build-specific ones.
 	baseEnv := []corev1.EnvVar{
 		{Name: "INDEX_BACKEND_URL", Value: ciBuild.Spec.IndexBackendURL},
@@ -78,6 +89,7 @@ func BuildJob(ciBuild *buildv1alpha1.CIBuild, configMapName string) *batchv1.Job
 			corev1.EnvVar{Name: "GIT_REPO_URL", Value: gs.URL},
 			corev1.EnvVar{Name: "GIT_REF", Value: gs.Ref},
 			corev1.EnvVar{Name: "ENTRYPOINT_FILE", Value: gs.EntrypointFile},
+			corev1.EnvVar{Name: "GIT_PROJECT_DIR", Value: gs.ProjectDir},
 		)
 	}
 	env := append(baseEnv, ciBuild.Spec.Env...)
@@ -127,10 +139,11 @@ func BuildJob(ciBuild *buildv1alpha1.CIBuild, configMapName string) *batchv1.Job
 					ServiceAccountName: builderSA,
 					Containers: []corev1.Container{
 						{
-							Name:         "builder",
-							Image:        ciBuild.Spec.BuilderImage,
-							Env:          env,
-							VolumeMounts: mounts,
+							Name:            "builder",
+							Image:           ciBuild.Spec.BuilderImage,
+							SecurityContext: builderSecurityContext,
+							Env:             env,
+							VolumeMounts:    mounts,
 							Resources: corev1.ResourceRequirements{
 								Requests: corev1.ResourceList{
 									corev1.ResourceCPU:    resource.MustParse("500m"),

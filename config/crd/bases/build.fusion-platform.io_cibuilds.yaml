@@ -23,6 +23,9 @@ spec:
     - jsonPath: .spec.artifactVersion
       name: Version
       type: string
+    - jsonPath: .spec.buildType
+      name: Type
+      type: string
     - jsonPath: .status.phase
       name: Phase
       type: string
@@ -78,6 +81,9 @@ spec:
                   ConfigData holds filename→content pairs mounted as a ConfigMap volume at /workspace.
                   For venv builds this contains "requirements.txt".
                 type: object
+              buildType:
+                description: BuildType identifies the build strategy ("requirements" or "git").
+                type: string
               description:
                 description: Description is a human-readable description of the artifact.
                 type: string
@@ -202,6 +208,24 @@ spec:
                   - name
                   type: object
                 type: array
+              gitSource:
+                description: GitSource specifies the git repository to clone for git-type builds.
+                properties:
+                  entrypointFile:
+                    description: EntrypointFile is an optional Python file at the project root to upload as a second artefact.
+                    type: string
+                  projectDir:
+                    description: ProjectDir is an optional relative path to the Python project within the repository (monorepo support).
+                    type: string
+                  ref:
+                    description: Ref is the branch or tag to check out.
+                    type: string
+                  url:
+                    description: URL is the HTTPS URL of the git repository.
+                    type: string
+                required:
+                - url
+                type: object
               indexBackendURL:
                 description: IndexBackendURL is the base URL of the fusion-index artifact
                   registry.

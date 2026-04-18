@@ -1,0 +1,21 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# ImageRepository resources tell Flux which container registries to scan for new tags.
+# TODO: replace the image values with your actual registry paths.
+---
+apiVersion: image.toolkit.fluxcd.io/v1beta2
+kind: ImageRepository
+metadata:
+  name: fusion-forge
+  namespace: flux-system
+spec:
+  image: registry.example.com/fusion/fusion-forge  # TODO
+  interval: 10m
+---
+apiVersion: image.toolkit.fluxcd.io/v1beta2
+kind: ImageRepository
+metadata:
+  name: fusion-venv-builder
+  namespace: flux-system
+spec:
+  image: registry.example.com/fusion/fusion-venv-builder  # TODO
+  interval: 10m
