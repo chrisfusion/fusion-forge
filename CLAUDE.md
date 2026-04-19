@@ -88,6 +88,7 @@ migrations/
   000004_add_project_dir.up.sql       # adds project_dir column (optional monorepo subdirectory)
 Dockerfile                 # builds /server + /operator; default ENTRYPOINT is /server
 Makefile
+flux/                      # Flux GitOps — sources/, environments/dev|staging|prod/, clusters/dev|staging|prod.yaml
 ```
 
 ## Platform Context
