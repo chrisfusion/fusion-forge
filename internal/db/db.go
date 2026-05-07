@@ -32,6 +32,7 @@ type VenvBuild struct {
 	EntrypointFile       *string
 	MetadataSource       string
 	ProjectDir           *string
+	PythonVersion        string
 	CreatedAt            time.Time
 	UpdatedAt            time.Time
 }
@@ -45,6 +46,7 @@ type CreateParams struct {
 	CreatorEmail         *string
 	IndexArtifactID      *int64
 	IndexArtifactVersion *string
+	PythonVersion        string
 }
 
 // CreateGitBuildParams holds the fields for creating a new git-type VenvBuild row.
@@ -60,6 +62,7 @@ type CreateGitBuildParams struct {
 	IndexArtifactVersion *string
 	MetadataSource       string
 	ProjectDir           *string
+	PythonVersion        string
 }
 
 // ListParams holds pagination and filter options for listing VenvBuilds.
@@ -86,7 +89,7 @@ func New(pool *pgxpool.Pool) *Queries {
 
 const scanCols = ` id, name, version, description, status, creator_id, creator_email,
 	index_artifact_id, index_artifact_version, ci_build_name,
-	build_type, repo_url, repo_ref, entrypoint_file, metadata_source, project_dir,
+	build_type, repo_url, repo_ref, entrypoint_file, metadata_source, project_dir, python_version,
 	created_at, updated_at `
 
 func scan(row pgx.Row) (VenvBuild, error) {
@@ -96,7 +99,7 @@ func scan(row pgx.Row) (VenvBuild, error) {
 		&b.CreatorID, &b.CreatorEmail,
 		&b.IndexArtifactID, &b.IndexArtifactVersion,
 		&b.CIBuildName,
-		&b.BuildType, &b.RepoURL, &b.RepoRef, &b.EntrypointFile, &b.MetadataSource, &b.ProjectDir,
+		&b.BuildType, &b.RepoURL, &b.RepoRef, &b.EntrypointFile, &b.MetadataSource, &b.ProjectDir, &b.PythonVersion,
 		&b.CreatedAt, &b.UpdatedAt,
 	)
 	return b, err
@@ -107,13 +110,13 @@ func (q *Queries) CreateVenvBuild(ctx context.Context, p CreateParams) (int64, e
 	const query = `
 		INSERT INTO venv_build
 			(name, version, description, status, creator_id, creator_email,
-			 index_artifact_id, index_artifact_version, build_type, created_at, updated_at)
-		VALUES ($1,$2,$3,'PENDING',$4,$5,$6,$7,'requirements',NOW(),NOW())
+			 index_artifact_id, index_artifact_version, build_type, python_version, created_at, updated_at)
+		VALUES ($1,$2,$3,'PENDING',$4,$5,$6,$7,'requirements',$8,NOW(),NOW())
 		RETURNING id`
 	var id int64
 	err := q.pool.QueryRow(ctx, query,
 		p.Name, p.Version, p.Description, p.CreatorID, p.CreatorEmail,
-		p.IndexArtifactID, p.IndexArtifactVersion,
+		p.IndexArtifactID, p.IndexArtifactVersion, p.PythonVersion,
 	).Scan(&id)
 	return id, err
 }
@@ -124,15 +127,15 @@ func (q *Queries) CreateGitBuild(ctx context.Context, p CreateGitBuildParams) (i
 		INSERT INTO venv_build
 			(name, version, description, status, creator_id,
 			 index_artifact_id, index_artifact_version,
-			 build_type, repo_url, repo_ref, entrypoint_file, metadata_source, project_dir,
+			 build_type, repo_url, repo_ref, entrypoint_file, metadata_source, project_dir, python_version,
 			 created_at, updated_at)
-		VALUES ($1,$2,$3,'PENDING',$4,$5,$6,'git',$7,$8,$9,$10,$11,NOW(),NOW())
+		VALUES ($1,$2,$3,'PENDING',$4,$5,$6,'git',$7,$8,$9,$10,$11,$12,NOW(),NOW())
 		RETURNING id`
 	var id int64
 	err := q.pool.QueryRow(ctx, query,
 		p.Name, p.Version, p.Description, p.CreatorID,
 		p.IndexArtifactID, p.IndexArtifactVersion,
-		p.RepoURL, p.RepoRef, p.EntrypointFile, p.MetadataSource, p.ProjectDir,
+		p.RepoURL, p.RepoRef, p.EntrypointFile, p.MetadataSource, p.ProjectDir, p.PythonVersion,
 	).Scan(&id)
 	return id, err
 }

@@ -131,6 +131,8 @@ spec:
               value: fusion
             - name: BUILDER_IMAGE
               value: fusion-venv-builder:local
+            - name: BUILDER_IMAGE_PY310
+              value: fusion-venv-builder-py310:local
             - name: AUTH_ENABLED
               value: "false"
           livenessProbe:

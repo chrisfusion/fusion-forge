@@ -23,8 +23,11 @@ type Config struct {
 	// IndexBackendURL is the base URL of the fusion-index artifact registry.
 	IndexBackendURL string
 
-	// BuilderImage is the container image used to execute builds.
+	// BuilderImage is the container image used for Python 3.12 builds (default).
 	BuilderImage string
+
+	// BuilderImagePy310 is the container image used for Python 3.10 builds.
+	BuilderImagePy310 string
 
 	// JobTTLSeconds is how long K8s keeps finished Jobs before GC.
 	JobTTLSeconds int32
@@ -61,7 +64,8 @@ func Load() *Config {
 		DBSSLMode:       getEnv("DB_SSLMODE", "disable"),
 		K8sNamespace:    getEnv("K8S_NAMESPACE", "fusion"),
 		IndexBackendURL: getEnv("INDEX_BACKEND_URL", "http://index-backend.fusion.svc.cluster.local:8080"),
-		BuilderImage:    getEnv("BUILDER_IMAGE", "ghcr.io/fusion-platform/venv-builder:latest"),
+		BuilderImage:      getEnv("BUILDER_IMAGE", "ghcr.io/fusion-platform/venv-builder:latest"),
+		BuilderImagePy310: getEnv("BUILDER_IMAGE_PY310", "ghcr.io/fusion-platform/venv-builder-py310:latest"),
 		JobTTLSeconds:   86400,
 		AuthEnabled:     getEnv("AUTH_ENABLED", "false") == "true",
 		AuthAudience:    getEnv("AUTH_AUDIENCE", ""),
@@ -73,6 +77,15 @@ func Load() *Config {
 		PodLabels:       parseKeyValueCSV(getEnv("BUILDER_POD_LABELS", "")),
 		PodAnnotations:  parseKeyValueCSV(getEnv("BUILDER_POD_ANNOTATIONS", "")),
 	}
+}
+
+// BuilderImageForVersion returns the builder image for the requested Python version.
+// Falls back to the default (3.12) image for unknown versions.
+func (c *Config) BuilderImageForVersion(version string) string {
+	if version == "3.10" {
+		return c.BuilderImagePy310
+	}
+	return c.BuilderImage
 }
 
 // DBURL returns the PostgreSQL connection URL.

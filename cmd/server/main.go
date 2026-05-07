@@ -10,7 +10,9 @@ import (
 
 	"github.com/golang-migrate/migrate/v4"
 	_ "github.com/golang-migrate/migrate/v4/database/postgres"
-	_ "github.com/golang-migrate/migrate/v4/source/file"
+	"github.com/golang-migrate/migrate/v4/source/iofs"
+
+	migrationsFS "fusion-platform.io/fusion-forge/migrations"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
@@ -77,7 +79,11 @@ func main() {
 }
 
 func runMigrations(dbURL string) {
-	m, err := migrate.New("file://migrations", dbURL)
+	src, err := iofs.New(migrationsFS.FS, ".")
+	if err != nil {
+		log.Fatalf("create migration source: %v", err)
+	}
+	m, err := migrate.NewWithSourceInstance("iofs", src, dbURL)
 	if err != nil {
 		log.Fatalf("create migrator: %v", err)
 	}

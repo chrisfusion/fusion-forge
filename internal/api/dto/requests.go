@@ -18,6 +18,9 @@ type CreateVenvRequest struct {
 
 	// Requirements is the uploaded requirements.txt file (1 byte – 100 KB).
 	Requirements *multipart.FileHeader `form:"requirements" binding:"required"`
+
+	// PythonVersion selects the Python interpreter. Accepted: "3.10", "3.12" (default).
+	PythonVersion string `form:"python_version" binding:"max=10"`
 }
 
 // CreateGitBuildRequest is the JSON body for POST /api/v1/gitbuilds.
@@ -61,4 +64,7 @@ type CreateGitBuildRequest struct {
 	// Use this when the project lives in a subdirectory of a monorepo (e.g. "services/myapp").
 	// Must be relative and must not contain ".." components. Max 500 chars.
 	ProjectDir string `json:"project_dir" form:"project_dir" binding:"max=500"`
+
+	// PythonVersion selects the Python interpreter. Accepted: "3.10", "3.12" (default).
+	PythonVersion string `json:"python_version" form:"python_version" binding:"max=10"`
 }

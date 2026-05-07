@@ -29,6 +29,7 @@ type VenvBuildResponse struct {
 	EntrypointFile       *string    `json:"entrypointFile,omitempty"`
 	MetadataSource       string     `json:"metadataSource,omitempty"`
 	ProjectDir           *string    `json:"projectDir,omitempty"`
+	PythonVersion        string     `json:"pythonVersion"`
 	CreatedAt            time.Time  `json:"createdAt"`
 	UpdatedAt            time.Time  `json:"updatedAt"`
 }
@@ -52,6 +53,7 @@ func ToResponse(b db.VenvBuild) VenvBuildResponse {
 		EntrypointFile:       b.EntrypointFile,
 		MetadataSource:       b.MetadataSource,
 		ProjectDir:           b.ProjectDir,
+		PythonVersion:        b.PythonVersion,
 		CreatedAt:            b.CreatedAt,
 		UpdatedAt:            b.UpdatedAt,
 	}

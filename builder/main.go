@@ -66,7 +66,11 @@ func main() {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
 	defer cancel()
 
-	log.Printf("[forge-builder] starting: type=%s artifact=%s version=%s", buildType, venvName, artifactVersion)
+	// PYTHON_VERSION is informational — the actual Python interpreter is determined by which
+	// builder image was selected (python:3.12-slim or python:3.10-slim). The env var is logged
+	// so the build record is visible in pod logs without inspecting the image tag.
+	pythonVersion := envDefault("PYTHON_VERSION", "3.12")
+	log.Printf("[forge-builder] starting: type=%s artifact=%s version=%s python=%s", buildType, venvName, artifactVersion, pythonVersion)
 
 	switch buildType {
 	case "git":

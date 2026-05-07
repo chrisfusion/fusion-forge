@@ -6,6 +6,7 @@ package handlers
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"strconv"
@@ -132,4 +133,18 @@ func boolStr(b bool) string {
 		return "true"
 	}
 	return "false"
+}
+
+// normalizePythonVersion validates the requested Python version and defaults to "3.12".
+// Returns an error for any version not explicitly supported.
+func normalizePythonVersion(v string) (string, error) {
+	if v == "" {
+		return "3.12", nil
+	}
+	switch v {
+	case "3.10", "3.12":
+		return v, nil
+	default:
+		return "", fmt.Errorf("unsupported python_version %q: accepted values are \"3.10\", \"3.12\"", v)
+	}
 }

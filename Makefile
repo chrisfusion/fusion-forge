@@ -1,11 +1,13 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 
-CONTROLLER_GEN ?= $(HOME)/go/bin/controller-gen
-IMG            ?= fusion-forge:latest
-BUILDER_IMG    ?= fusion-venv-builder:latest
-NAMESPACE      ?= fusion
+CONTROLLER_GEN     ?= $(HOME)/go/bin/controller-gen
+IMG                ?= fusion-forge:latest
+BUILDER_IMG        ?= fusion-venv-builder:latest
+BUILDER_IMG_PY310  ?= fusion-venv-builder-py310:latest
+NAMESPACE          ?= fusion
 
 .PHONY: all build test generate manifests docker-build docker-build-builder \
+        docker-build-builder-py310 \
         install-crds install-rbac deploy undeploy minikube-deploy create-namespace
 
 all: generate build
@@ -28,9 +30,13 @@ test:
 docker-build:
 	eval $$(minikube docker-env) && docker build -t $(IMG) .
 
-## Build and load the builder image into minikube.
+## Build and load the Python 3.12 builder image into minikube.
 docker-build-builder:
 	eval $$(minikube docker-env) && docker build -t $(BUILDER_IMG) builder/
+
+## Build and load the Python 3.10 builder image into minikube.
+docker-build-builder-py310:
+	eval $$(minikube docker-env) && docker build -t $(BUILDER_IMG_PY310) -f builder/Dockerfile.py310 builder/
 
 ## Create the fusion namespace (idempotent).
 create-namespace:
@@ -55,4 +61,4 @@ undeploy:
 	kubectl delete -f config/crd/bases/   --ignore-not-found
 
 ## Full minikube dev cycle: build images, install CRDs + RBAC, deploy.
-minikube-deploy: create-namespace docker-build docker-build-builder deploy
+minikube-deploy: create-namespace docker-build docker-build-builder docker-build-builder-py310 deploy

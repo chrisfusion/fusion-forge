@@ -91,6 +91,12 @@ func (h *VenvHandler) Create(c *gin.Context) {
 		return
 	}
 
+	pythonVersion, err := normalizePythonVersion(req.PythonVersion)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
 	requirementsTxt, ok := readRequirementsFile(c, req)
 	if !ok {
 		return
@@ -146,6 +152,7 @@ func (h *VenvHandler) Create(c *gin.Context) {
 		CreatorID:            creator,
 		IndexArtifactID:      &artifactID,
 		IndexArtifactVersion: &artifactVersion,
+		PythonVersion:        pythonVersion,
 	})
 	if err != nil {
 		if isUniqueViolation(err) {
@@ -159,6 +166,9 @@ func (h *VenvHandler) Create(c *gin.Context) {
 	ciBuildName := fmt.Sprintf("forge-venv-%d", buildID)
 	if err := h.DB.UpdateCIBuildName(ctx, buildID, ciBuildName); err != nil {
 		log.Printf("forge: update ci_build_name for build %d: %v", buildID, err)
+		_ = h.DB.UpdateStatus(ctx, buildID, "FAILED")
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to record build name"})
+		return
 	}
 
 	ciBuild := buildv1alpha1.CIBuild{
@@ -167,7 +177,7 @@ func (h *VenvHandler) Create(c *gin.Context) {
 			Namespace: h.Cfg.K8sNamespace,
 		},
 		Spec: buildv1alpha1.CIBuildSpec{
-			BuilderImage:    h.Cfg.BuilderImage,
+			BuilderImage:    h.Cfg.BuilderImageForVersion(pythonVersion),
 			IndexBackendURL: h.Cfg.IndexBackendURL,
 			BuildType:       "requirements",
 			ArtifactName:    req.Name,
@@ -181,6 +191,7 @@ func (h *VenvHandler) Create(c *gin.Context) {
 				{Name: "ARTIFACT_VERSION", Value: req.Version},
 				{Name: "VENV_NAME", Value: req.Name},
 				{Name: "BUILD_TYPE", Value: "requirements"},
+				{Name: "PYTHON_VERSION", Value: pythonVersion},
 			},
 		},
 	}

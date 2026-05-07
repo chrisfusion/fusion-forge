@@ -100,6 +100,11 @@ func (h *GitBuildHandler) Create(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
+	pythonVersion, err := normalizePythonVersion(req.PythonVersion)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
 
 	ctx := c.Request.Context()
 
@@ -160,6 +165,7 @@ func (h *GitBuildHandler) Create(c *gin.Context) {
 		IndexArtifactVersion: &artifactVersion,
 		MetadataSource:       req.MetadataSource,
 		ProjectDir:           projectDir,
+		PythonVersion:        pythonVersion,
 	})
 	if err != nil {
 		if isUniqueViolation(err) {
@@ -184,7 +190,7 @@ func (h *GitBuildHandler) Create(c *gin.Context) {
 			Namespace: h.Cfg.K8sNamespace,
 		},
 		Spec: buildv1alpha1.CIBuildSpec{
-			BuilderImage:    h.Cfg.BuilderImage,
+			BuilderImage:    h.Cfg.BuilderImageForVersion(pythonVersion),
 			IndexBackendURL: h.Cfg.IndexBackendURL,
 			BuildType:       "git",
 			ArtifactName:    req.Name,
@@ -202,6 +208,7 @@ func (h *GitBuildHandler) Create(c *gin.Context) {
 				{Name: "ARTIFACT_VERSION", Value: req.Version},
 				{Name: "VENV_NAME", Value: req.Name},
 				{Name: "BUILD_TYPE", Value: "git"},
+				{Name: "PYTHON_VERSION", Value: pythonVersion},
 				{Name: "REQUIRE_PYPROJECT_TOML", Value: boolStr(h.GitRules.RequirePyprojectToml)},
 				{Name: "REQUIRE_SRC_DIR", Value: boolStr(h.GitRules.RequireSrcDir)},
 			},
