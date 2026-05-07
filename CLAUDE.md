@@ -217,6 +217,15 @@ status:
 - **`strPtr` in handlers/helpers.go already returns nil for empty string** — no need for a separate helper when storing optional string fields as `*string`
 - **`project_dir` monorepo support**: optional relative path within a repo; validated to reject absolute paths and `..` escapes; shifts the project root for pyproject.toml lookup (server-side), structure validation, wheel build, and entrypoint resolution (builder-side)
 
+## Migrations
+
+- Migrations are embedded in the binary via `//go:embed *.sql` in `migrations/embed.go` + `source/iofs` — **do not** use `file://migrations` (fails in distroless at runtime: `versionExists` scans the source even when DB is up to date, and the path resolves incorrectly)
+- To apply a migration manually in minikube: `kubectl exec -n fusion fusion-forge-postgresql-0 -- psql -U fusion -d fusion_forge -c "<SQL>"` then update `schema_migrations` version accordingly
+
+## minikube image tags
+
+- `k8s/deployment.yaml` uses `:local` tags — always build with `make docker-build` (tags `:local`) or pass `IMG=fusion-forge:local`; building with a semver tag (`:0.2.1`) won't be picked up by the pods
+
 ## Validation
 
 `validation.Validate(requirementsTxt, rules)` is a pure function (no side effects). Rules are loaded at startup via `LoadRules(path)` which embeds the default `forge-rules.yaml` via `//go:embed`.
