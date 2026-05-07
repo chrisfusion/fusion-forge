@@ -20,6 +20,31 @@ const (
 	builderSA           = "fusion-forge-builder"
 )
 
+// BuildOptions carries deployment-time metadata to apply to the Job and its Pod template.
+// System-managed labels and annotations always win over user-supplied values.
+type BuildOptions struct {
+	JobLabels      map[string]string
+	JobAnnotations map[string]string
+	PodLabels      map[string]string
+	PodAnnotations map[string]string
+}
+
+// mergeWithSystemWin merges extra into system, with system entries always taking priority.
+// Always returns a new map so callers can safely mutate the result.
+func mergeWithSystemWin(extra, system map[string]string) map[string]string {
+	if len(extra) == 0 && len(system) == 0 {
+		return nil
+	}
+	out := make(map[string]string, len(system)+len(extra))
+	for k, v := range extra {
+		out[k] = v
+	}
+	for k, v := range system {
+		out[k] = v
+	}
+	return out
+}
+
 // ConfigMapName returns the deterministic ConfigMap name for a CIBuild.
 func ConfigMapName(ciBuildName string) string {
 	return "forge-cfg-" + ciBuildName
@@ -52,7 +77,7 @@ func BuildConfigMap(ciBuild *buildv1alpha1.CIBuild) *corev1.ConfigMap {
 // The Job is owned by the CIBuild CR so it is garbage-collected on deletion.
 // For git builds (BuildType=="git") the GitSource fields are injected as env vars and
 // the ConfigMap volume/mounts are omitted because there are no workspace files to mount.
-func BuildJob(ciBuild *buildv1alpha1.CIBuild, configMapName string) *batchv1.Job {
+func BuildJob(ciBuild *buildv1alpha1.CIBuild, configMapName string, opts BuildOptions) *batchv1.Job {
 	backoffLimit := int32(0)
 	ttl := int32(86400) // 24 h
 
@@ -111,28 +136,35 @@ func BuildJob(ciBuild *buildv1alpha1.CIBuild, configMapName string) *batchv1.Job
 		}
 	}
 
+	jobSystemLabels := map[string]string{
+		labelManagedByKey:             labelManagedByValue,
+		"app.kubernetes.io/component": "ci-builder",
+		labelBuildIDKey:               ciBuild.Name,
+	}
+	jobSystemAnnotations := map[string]string{
+		"build.fusion-platform.io/artifact": ciBuild.Spec.ArtifactName + ":" + ciBuild.Spec.ArtifactVersion,
+	}
+	podSystemLabels := map[string]string{
+		labelManagedByKey: labelManagedByValue,
+		labelBuildIDKey:   ciBuild.Name,
+	}
+	// no system pod annotations yet; defined explicitly so future additions are obvious
+	podSystemAnnotations := map[string]string(nil)
+
 	return &batchv1.Job{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      JobName(ciBuild.Name),
-			Namespace: ciBuild.Namespace,
-			Labels: map[string]string{
-				labelManagedByKey:             labelManagedByValue,
-				"app.kubernetes.io/component": "ci-builder",
-				labelBuildIDKey:               ciBuild.Name,
-			},
-			Annotations: map[string]string{
-				"build.fusion-platform.io/artifact": ciBuild.Spec.ArtifactName + ":" + ciBuild.Spec.ArtifactVersion,
-			},
+			Name:        JobName(ciBuild.Name),
+			Namespace:   ciBuild.Namespace,
+			Labels:      mergeWithSystemWin(opts.JobLabels, jobSystemLabels),
+			Annotations: mergeWithSystemWin(opts.JobAnnotations, jobSystemAnnotations),
 		},
 		Spec: batchv1.JobSpec{
 			BackoffLimit:            &backoffLimit,
 			TTLSecondsAfterFinished: &ttl,
 			Template: corev1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{
-					Labels: map[string]string{
-						labelManagedByKey: labelManagedByValue,
-						labelBuildIDKey:   ciBuild.Name,
-					},
+					Labels:      mergeWithSystemWin(opts.PodLabels, podSystemLabels),
+					Annotations: mergeWithSystemWin(opts.PodAnnotations, podSystemAnnotations),
 				},
 				Spec: corev1.PodSpec{
 					RestartPolicy:      corev1.RestartPolicyNever,

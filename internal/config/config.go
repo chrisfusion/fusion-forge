@@ -11,13 +11,13 @@ import (
 
 // Config holds all runtime configuration loaded from environment variables.
 type Config struct {
-	Port        string
-	DBHost      string
-	DBPort      string
-	DBName      string
-	DBUser      string
-	DBPassword  string
-	DBSSLMode   string
+	Port         string
+	DBHost       string
+	DBPort       string
+	DBName       string
+	DBUser       string
+	DBPassword   string
+	DBSSLMode    string
 	K8sNamespace string
 
 	// IndexBackendURL is the base URL of the fusion-index artifact registry.
@@ -39,6 +39,14 @@ type Config struct {
 
 	// GitRulesFile is the path to forge-git-rules.yaml. Empty = use embedded default.
 	GitRulesFile string
+
+	// Builder Job and Pod metadata injected by the operator at deployment time.
+	// Format: comma-separated KEY=VALUE pairs, e.g. "team=platform,env=prod".
+	// System labels always take precedence over user-supplied values.
+	JobLabels      map[string]string
+	JobAnnotations map[string]string
+	PodLabels      map[string]string
+	PodAnnotations map[string]string
 }
 
 // Load reads configuration from environment variables with sensible defaults.
@@ -60,6 +68,10 @@ func Load() *Config {
 		AuthAllowedSAs:  splitCSV(getEnv("AUTH_ALLOWED_SA", "")),
 		RulesFile:       getEnv("FORGE_RULES_FILE", ""),
 		GitRulesFile:    getEnv("FORGE_GIT_RULES_FILE", ""),
+		JobLabels:       parseKeyValueCSV(getEnv("BUILDER_JOB_LABELS", "")),
+		JobAnnotations:  parseKeyValueCSV(getEnv("BUILDER_JOB_ANNOTATIONS", "")),
+		PodLabels:       parseKeyValueCSV(getEnv("BUILDER_POD_LABELS", "")),
+		PodAnnotations:  parseKeyValueCSV(getEnv("BUILDER_POD_ANNOTATIONS", "")),
 	}
 }
 
@@ -86,6 +98,26 @@ func splitCSV(s string) []string {
 		if t := strings.TrimSpace(p); t != "" {
 			out = append(out, t)
 		}
+	}
+	return out
+}
+
+func parseKeyValueCSV(s string) map[string]string {
+	if s == "" {
+		return nil
+	}
+	pairs := strings.Split(s, ",")
+	out := make(map[string]string, len(pairs))
+	for _, p := range pairs {
+		k, v, ok := strings.Cut(strings.TrimSpace(p), "=")
+		k = strings.TrimSpace(k)
+		v = strings.TrimSpace(v)
+		if ok && k != "" {
+			out[k] = v
+		}
+	}
+	if len(out) == 0 {
+		return nil
 	}
 	return out
 }

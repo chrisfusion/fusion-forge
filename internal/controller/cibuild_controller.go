@@ -35,7 +35,11 @@ var ciBuildGVK = schema.GroupVersionKind{
 // the corresponding Kubernetes Job and ConfigMap.
 type CIBuildReconciler struct {
 	client.Client
-	Scheme *runtime.Scheme
+	Scheme         *runtime.Scheme
+	JobLabels      map[string]string
+	JobAnnotations map[string]string
+	PodLabels      map[string]string
+	PodAnnotations map[string]string
 }
 
 // +kubebuilder:rbac:groups=build.fusion-platform.io,resources=cibuilds,verbs=get;list;watch;create;update;patch;delete
@@ -138,7 +142,13 @@ func (r *CIBuildReconciler) ensureConfigMap(ctx context.Context, owner *buildv1a
 
 // ensureJob creates the Job if it does not already exist.
 func (r *CIBuildReconciler) ensureJob(ctx context.Context, owner *buildv1alpha1.CIBuild, cmName, jobName string) error {
-	job := jobbuilder.BuildJob(owner, cmName)
+	opts := jobbuilder.BuildOptions{
+		JobLabels:      r.JobLabels,
+		JobAnnotations: r.JobAnnotations,
+		PodLabels:      r.PodLabels,
+		PodAnnotations: r.PodAnnotations,
+	}
+	job := jobbuilder.BuildJob(owner, cmName, opts)
 	if err := ctrl.SetControllerReference(owner, job, r.Scheme); err != nil {
 		return err
 	}

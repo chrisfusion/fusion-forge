@@ -118,6 +118,10 @@ flux/                      # Flux GitOps — sources/, environments/dev|staging|
 | `AUTH_ALLOWED_SA` | _(empty)_ | Comma-separated `namespace/name` allowlist |
 | `FORGE_RULES_FILE` | _(empty)_ | Path to forge-rules.yaml; empty = use embedded default |
 | `FORGE_GIT_RULES_FILE` | _(empty)_ | Path to forge-git-rules.yaml; empty = use embedded default |
+| `BUILDER_JOB_LABELS` | _(empty)_ | Comma-separated `KEY=VALUE` labels added to every builder Job (operator only; system labels win) |
+| `BUILDER_JOB_ANNOTATIONS` | _(empty)_ | Comma-separated `KEY=VALUE` annotations added to every builder Job (operator only; system annotations win) |
+| `BUILDER_POD_LABELS` | _(empty)_ | Comma-separated `KEY=VALUE` labels added to every builder Pod template (operator only; system labels win) |
+| `BUILDER_POD_ANNOTATIONS` | _(empty)_ | Comma-separated `KEY=VALUE` annotations added to every builder Pod template (operator only) |
 
 ## CIBuild CRD (`build.fusion-platform.io/v1alpha1`)
 
@@ -188,6 +192,9 @@ status:
 
 ## Gotchas
 
+- **Operator also calls `config.Load()`**: as of the builder-pod-metadata feature, `cmd/operator/main.go` calls `config.Load()` at startup (previously it read only CLI flags); the operator uses only the 4 `BUILDER_*` fields and ignores DB/auth fields
+- **Map-type env vars use `parseKeyValueCSV`**: format is `KEY=VALUE,KEY=VALUE`; helper is in `internal/config/config.go` — reuse for any future map config rather than inventing a new format
+- **Deployment-time Job/Pod config goes through `BuildOptions`**: `internal/jobbuilder/jobbuilder.go` has a `BuildOptions` struct and `mergeWithSystemWin` helper — extend `BuildOptions` when adding new per-deployment pod/job metadata; system labels always win
 - **API uses multipart form, not JSON**: `POST /api/v1/venvs` and `POST /api/v1/venvs/validate` expect `multipart/form-data` with fields `name`, `version`, `description`, and `requirements` (file upload) — not a JSON body
 - **Smoke test after deploy**: `curl http://localhost:18080/q/health/live` (live), `curl http://localhost:18080/q/health/ready` (ready), `curl -F "name=t" -F "version=1.0.0" -F "requirements=@/tmp/req.txt" -X POST http://localhost:18080/api/v1/venvs/validate`
 - **controller-gen required for type changes**: after editing `api/v1alpha1/`, run `make generate` then `kubectl apply -f config/crd/bases/`; if controller-gen is unavailable, manually update `zz_generated.deepcopy.go` — pointer fields need nil-guard + recursive DeepCopy, value-only structs use `*out = *in`

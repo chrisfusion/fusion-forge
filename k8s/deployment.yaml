@@ -196,6 +196,17 @@ spec:
             - "--namespace=fusion"
             - "--health-probe-bind-address=:8081"
             - "--metrics-bind-address=:8082"
+          env:
+            # Optional: comma-separated KEY=VALUE pairs applied to every builder Job/Pod.
+            # System-managed labels/annotations always take precedence.
+            # - name: BUILDER_JOB_LABELS
+            #   value: "team=platform,env=dev"
+            # - name: BUILDER_JOB_ANNOTATIONS
+            #   value: "prometheus.io/scrape=false"
+            # - name: BUILDER_POD_LABELS
+            #   value: "team=platform,env=dev"
+            # - name: BUILDER_POD_ANNOTATIONS
+            #   value: "vault.hashicorp.com/agent-inject=false"
           ports:
             - name: metrics
               containerPort: 8082

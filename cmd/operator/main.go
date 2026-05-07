@@ -17,6 +17,7 @@ import (
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 
 	buildv1alpha1 "fusion-platform.io/fusion-forge/api/v1alpha1"
+	"fusion-platform.io/fusion-forge/internal/config"
 	"fusion-platform.io/fusion-forge/internal/controller"
 )
 
@@ -45,6 +46,8 @@ func main() {
 	ctrl.SetLogger(zap.New(zap.UseFlagOptions(&opts)))
 	logger := ctrl.Log.WithName("main")
 
+	cfg := config.Load()
+
 	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
 		Scheme:                 scheme,
 		Metrics:                metricsserver.Options{BindAddress: metricsAddr},
@@ -65,8 +68,12 @@ func main() {
 	}
 
 	if err := (&controller.CIBuildReconciler{
-		Client: mgr.GetClient(),
-		Scheme: mgr.GetScheme(),
+		Client:         mgr.GetClient(),
+		Scheme:         mgr.GetScheme(),
+		JobLabels:      cfg.JobLabels,
+		JobAnnotations: cfg.JobAnnotations,
+		PodLabels:      cfg.PodLabels,
+		PodAnnotations: cfg.PodAnnotations,
 	}).SetupWithManager(mgr); err != nil {
 		logger.Error(err, "unable to set up CIBuild controller")
 		os.Exit(1)
