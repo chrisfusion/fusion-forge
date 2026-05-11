@@ -30,8 +30,12 @@ make docker-build
 # Build builder image (inside minikube)
 make docker-build-builder
 
-# Full minikube deploy cycle
-make minikube-deploy
+# Deploy / upgrade via Helm (primary method — replaced kubectl apply)
+helm upgrade --install fusion-forge deployment/ -n fusion
+
+# First-time install only (if CRD conflict from old kubectl apply):
+kubectl delete crd cibuilds.build.fusion-platform.io
+helm install fusion-forge deployment/ -n fusion
 
 # Port-forward server (keep running in a separate terminal)
 kubectl port-forward -n fusion service/fusion-forge 18080:8080 --address 127.0.0.1
@@ -192,6 +196,9 @@ status:
 
 ## Gotchas
 
+- **Helm release name is `fusion-forge` in namespace `fusion`**: use `helm upgrade fusion-forge deployment/ -n fusion` for all updates; `k8s/deployment.yaml` is kept as reference only and is NOT the live deployment
+- **StatefulSet deletion preserves the PVC**: `data-fusion-forge-postgresql-0` survives `kubectl delete statefulset` — safe to delete and reinstall without losing DB data
+- **CRD field-manager conflict on Helm install**: if the CIBuild CRD was previously applied with `kubectl apply`, `helm install` fails with "conflict with kubectl-client-side-apply on .spec.versions" — fix: `kubectl delete crd cibuilds.build.fusion-platform.io` then re-run install; CIBuild CR instances are deleted but DB records are intact
 - **Operator also calls `config.Load()`**: as of the builder-pod-metadata feature, `cmd/operator/main.go` calls `config.Load()` at startup (previously it read only CLI flags); the operator uses only the 4 `BUILDER_*` fields and ignores DB/auth fields
 - **Map-type env vars use `parseKeyValueCSV`**: format is `KEY=VALUE,KEY=VALUE`; helper is in `internal/config/config.go` — reuse for any future map config rather than inventing a new format
 - **Deployment-time Job/Pod config goes through `BuildOptions`**: `internal/jobbuilder/jobbuilder.go` has a `BuildOptions` struct and `mergeWithSystemWin` helper — extend `BuildOptions` when adding new per-deployment pod/job metadata; system labels always win
@@ -225,6 +232,10 @@ status:
 ## minikube image tags
 
 - `k8s/deployment.yaml` uses `:local` tags — always build with `make docker-build` (tags `:local`) or pass `IMG=fusion-forge:local`; building with a semver tag (`:0.2.1`) won't be picked up by the pods
+
+## Changelog
+
+Every feature addition and bugfix must be reflected in `CHANGELOG.md` before the work is considered done. Follow the existing format: add an entry under `## [Unreleased]` or create a new `## [x.y.z] — YYYY-MM-DD` section. Use `### Added`, `### Changed`, `### Fixed`, or `### Removed` subsections as appropriate.
 
 ## Validation
 

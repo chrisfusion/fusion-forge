@@ -84,5 +84,22 @@ spec:
             initialDelaySeconds: 10
             periodSeconds: 30
             failureThreshold: 3
+          env:
+            {{- with .Values.operator.config.builderJobLabels }}
+            - name: BUILDER_JOB_LABELS
+              value: {{ include "fusion-forge.mapToKeyValueCSV" . | quote }}
+            {{- end }}
+            {{- with .Values.operator.config.builderJobAnnotations }}
+            - name: BUILDER_JOB_ANNOTATIONS
+              value: {{ include "fusion-forge.mapToKeyValueCSV" . | quote }}
+            {{- end }}
+            {{- with .Values.operator.config.builderPodLabels }}
+            - name: BUILDER_POD_LABELS
+              value: {{ include "fusion-forge.mapToKeyValueCSV" . | quote }}
+            {{- end }}
+            {{- with .Values.operator.config.builderPodAnnotations }}
+            - name: BUILDER_POD_ANNOTATIONS
+              value: {{ include "fusion-forge.mapToKeyValueCSV" . | quote }}
+            {{- end }}
           resources:
             {{- toYaml .Values.operator.resources | nindent 12 }}

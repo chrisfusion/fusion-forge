@@ -15,6 +15,7 @@ data:
   DB_SSLMODE: "disable"
   K8S_NAMESPACE: {{ .Values.server.config.k8sNamespace | quote }}
   BUILDER_IMAGE: {{ .Values.server.config.builderImage | quote }}
+  BUILDER_IMAGE_PY310: {{ .Values.server.config.builderImagePy310 | quote }}
   INDEX_BACKEND_URL: {{ .Values.server.config.indexBackendURL | quote }}
   AUTH_ENABLED: {{ .Values.server.config.authEnabled | quote }}
   AUTH_AUDIENCE: {{ .Values.server.config.authAudience | quote }}

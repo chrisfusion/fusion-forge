@@ -1,4 +1,17 @@
 {{/*
+Converts a map to a comma-separated KEY=VALUE string expected by parseKeyValueCSV
+in internal/config/config.go. Produces an empty string for a nil/empty map.
+Example: {team: platform, env: prod} → "team=platform,env=prod"
+*/}}
+{{- define "fusion-forge.mapToKeyValueCSV" -}}
+{{- $pairs := list -}}
+{{- range $k, $v := . -}}
+{{- $pairs = append $pairs (printf "%s=%s" $k $v) -}}
+{{- end -}}
+{{- join "," $pairs -}}
+{{- end -}}
+
+{{/*
 Standard Helm labels applied to every resource.
 */}}
 {{- define "fusion-forge.labels" -}}
