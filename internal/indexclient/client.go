@@ -14,6 +14,7 @@ import (
 	"net/http"
 	"net/url"
 	"path/filepath"
+	"strings"
 	"time"
 )
 
@@ -141,26 +142,30 @@ func (c *Client) CreateVersion(ctx context.Context, artifactID int64, semver, de
 }
 
 // UploadFile uploads data as a multipart file to the given artifact version.
-func (c *Client) UploadFile(ctx context.Context, artifactID int64, semver, filename string, data io.Reader) error {
+// size must be the exact byte count readable from data; it is used to set
+// Content-Length so the body is streamed without buffering the file in memory.
+// A mismatch between size and the actual data length will corrupt the request body.
+func (c *Client) UploadFile(ctx context.Context, artifactID int64, semver, filename string, data io.Reader, size int64) error {
 	reqURL := fmt.Sprintf("%s/api/v1/artifacts/%d/versions/%s/files",
 		c.baseURL, artifactID, url.PathEscape(semver))
 
-	body := &bytes.Buffer{}
-	writer := multipart.NewWriter(body)
-	part, err := writer.CreateFormFile("file", filename)
-	if err != nil {
+	// Write only the part header to measure its exact byte count.
+	var headerBuf bytes.Buffer
+	mw := multipart.NewWriter(&headerBuf)
+	if _, err := mw.CreateFormFile("file", filename); err != nil {
 		return fmt.Errorf("create form file: %w", err)
 	}
-	if _, err := io.Copy(part, data); err != nil {
-		return fmt.Errorf("write file data: %w", err)
-	}
-	writer.Close()
+	footer := "\r\n--" + mw.Boundary() + "--\r\n"
+	totalSize := int64(headerBuf.Len()) + size + int64(len(footer))
+
+	body := io.MultiReader(&headerBuf, data, strings.NewReader(footer))
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, reqURL, body)
 	if err != nil {
 		return fmt.Errorf("build upload request: %w", err)
 	}
-	req.Header.Set("Content-Type", writer.FormDataContentType())
+	req.ContentLength = totalSize
+	req.Header.Set("Content-Type", mw.FormDataContentType())
 
 	resp, err := c.http.Do(req)
 	if err != nil {

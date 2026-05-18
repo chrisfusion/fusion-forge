@@ -68,6 +68,9 @@ values-*.local.yaml
 kubeconfig
 *.kubeconfig
 
+# Playwright MCP session artifacts
+.playwright-mcp/
+
 # Common
 .env
 .env.*

@@ -226,6 +226,9 @@ status:
 - **Adding a field to git builds touches 8 layers**: dto/requests.go → gitbuilds handler (validate + wire) → db.go (struct + params + scanCols + scan + INSERT) → internal/gitutil/pyproject.go (if metadata-related) → api/v1alpha1/cibuild_types.go (GitSourceSpec) → config/crd/bases/ YAML (gitSource properties, manual edit) → jobbuilder (env var injection) → builder/main.go (env var read + use)
 - **`strPtr` in handlers/helpers.go already returns nil for empty string** — no need for a separate helper when storing optional string fields as `*string`
 - **`project_dir` monorepo support**: optional relative path within a repo; validated to reject absolute paths and `..` escapes; shifts the project root for pyproject.toml lookup (server-side), structure validation, wheel build, and entrypoint resolution (builder-side)
+- **Builder Dockerfile runs as UID 1000**: `builder/Dockerfile` and `Dockerfile.py310` create a `builder` user (UID 1000) and `chown 1000:1000 /workspace` — required because the pod security context defaults to `runAsUser: 1000`; if you change the UID in `builderPodSecurityContext.runAsUser`, update both Dockerfiles to match
+- **`UploadFile` in indexclient requires exact `size`**: signature is `UploadFile(ctx, artifactID, semver, filename, data io.Reader, size int64)` — `size` must be the exact readable byte count of `data`; it is used to set `Content-Length` so the body streams without buffering; a mismatch silently corrupts the request body at the receiver
+- **Linkerd: `builderInject` is for Job completion, not upload fix**: `linkerd.builderInject: "disabled"` prevents Job-completion hangs (Linkerd sidecar outlives the builder binary and blocks the Job from reaching `Completed`); it does NOT fix large upload failures; for uploads >~2 MB through Linkerd, set `linkerd.opaquePorts: "8080"` in the fusion-index Helm chart — that switches to raw mTLS TCP (keeps full Linkerd observability)
 
 ## Migrations
 

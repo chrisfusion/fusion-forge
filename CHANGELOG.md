@@ -9,6 +9,14 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [0.7.2] — 2026-05-18
+
+### Fixed
+- `builder/main.go` `uploadFile`: replaced full in-memory buffering (`bytes.Buffer` + `io.Copy`) with streaming via `io.MultiReader`; the multipart header is written to a small buffer to pre-compute `Content-Length`, then the file is streamed directly from disk — no allocation proportional to file size
+- `internal/indexclient/client.go` `UploadFile`: same streaming fix; signature gains `size int64` so callers supply the file size and the method sets `Content-Length` without buffering
+
+---
+
 ## [0.7.1] — 2026-05-18
 
 ### Added
@@ -23,6 +31,9 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - Builder Job pods now get a pod-level `securityContext` with `runAsNonRoot`, `runAsUser`, and `seccompProfile` — defaults: `runAsNonRoot: true`, `runAsUser: 1000`, `seccompProfile.type: RuntimeDefault`
 - `deployment/values.yaml`: `operator.config.builderPodSecurityContext` structured object to configure the builder pod security context per environment
 - Operator env vars `BUILDER_POD_RUN_AS_NON_ROOT`, `BUILDER_POD_RUN_AS_USER`, `BUILDER_POD_SECCOMP_PROFILE` wired through `Config` → `CIBuildReconciler` → `BuildOptions` → `BuildJob`
+
+### Fixed
+- `builder/Dockerfile`, `builder/Dockerfile.py310`: added `useradd -u 1000` + `chown 1000:1000 /workspace` so the builder binary runs as UID 1000 and can write to `/workspace`; without this, the `runAsUser: 1000` pod security context caused `Permission denied` on first write
 
 ---
 

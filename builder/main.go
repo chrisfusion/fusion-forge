@@ -38,6 +38,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"time"
 )
 
@@ -221,6 +222,9 @@ func run(name string, args ...string) {
 }
 
 // uploadFile POSTs the file at path as a multipart/form-data upload.
+// The file is streamed directly from disk — the content is never loaded into memory.
+// Content-Length is pre-computed from the multipart header size + file size + footer size
+// so proxies and servers receive a properly framed request without chunked encoding.
 func uploadFile(ctx context.Context, uploadURL, filename, path string) error {
 	f, err := os.Open(path)
 	if err != nil {
@@ -228,22 +232,28 @@ func uploadFile(ctx context.Context, uploadURL, filename, path string) error {
 	}
 	defer f.Close()
 
-	body := &bytes.Buffer{}
-	writer := multipart.NewWriter(body)
-	part, err := writer.CreateFormFile("file", filename)
+	fi, err := f.Stat()
 	if err != nil {
+		return fmt.Errorf("stat file: %w", err)
+	}
+
+	// Write only the part header into a small buffer to measure its exact byte count.
+	var headerBuf bytes.Buffer
+	mw := multipart.NewWriter(&headerBuf)
+	if _, err := mw.CreateFormFile("file", filename); err != nil {
 		return fmt.Errorf("create form file: %w", err)
 	}
-	if _, err := io.Copy(part, f); err != nil {
-		return fmt.Errorf("copy file data: %w", err)
-	}
-	writer.Close()
+	footer := "\r\n--" + mw.Boundary() + "--\r\n"
+	totalSize := int64(headerBuf.Len()) + fi.Size() + int64(len(footer))
+
+	body := io.MultiReader(&headerBuf, f, strings.NewReader(footer))
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, uploadURL, body)
 	if err != nil {
 		return fmt.Errorf("build request: %w", err)
 	}
-	req.Header.Set("Content-Type", writer.FormDataContentType())
+	req.ContentLength = totalSize
+	req.Header.Set("Content-Type", mw.FormDataContentType())
 
 	client := &http.Client{Timeout: 5 * time.Minute}
 	resp, err := client.Do(req)

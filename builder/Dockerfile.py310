@@ -21,6 +21,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 COPY --from=go-builder /forge-builder /usr/local/bin/forge-builder
 
+RUN useradd -u 1000 -m builder && mkdir -p /workspace && chown 1000:1000 /workspace
+
+USER 1000
 WORKDIR /workspace
 
 ENTRYPOINT ["/usr/local/bin/forge-builder"]
