@@ -9,6 +9,15 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [0.7.0] — 2026-05-18
+
+### Added
+- Builder Job pods now get a pod-level `securityContext` with `runAsNonRoot`, `runAsUser`, and `seccompProfile` — defaults: `runAsNonRoot: true`, `runAsUser: 1000`, `seccompProfile.type: RuntimeDefault`
+- `deployment/values.yaml`: `operator.config.builderPodSecurityContext` structured object to configure the builder pod security context per environment
+- Operator env vars `BUILDER_POD_RUN_AS_NON_ROOT`, `BUILDER_POD_RUN_AS_USER`, `BUILDER_POD_SECCOMP_PROFILE` wired through `Config` → `CIBuildReconciler` → `BuildOptions` → `BuildJob`
+
+---
+
 ## [0.6.1] — 2026-05-11
 
 ### Fixed

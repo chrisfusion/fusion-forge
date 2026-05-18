@@ -6,6 +6,7 @@ package config
 import (
 	"fmt"
 	"os"
+	"strconv"
 	"strings"
 )
 
@@ -50,6 +51,11 @@ type Config struct {
 	JobAnnotations map[string]string
 	PodLabels      map[string]string
 	PodAnnotations map[string]string
+
+	// Builder Pod-level security context defaults applied to every builder Job.
+	BuilderPodRunAsNonRoot   bool
+	BuilderPodRunAsUser      int64  // 0 = not set
+	BuilderPodSeccompProfile string // "" = not set; e.g. "RuntimeDefault"
 }
 
 // Load reads configuration from environment variables with sensible defaults.
@@ -76,6 +82,9 @@ func Load() *Config {
 		JobAnnotations:  parseKeyValueCSV(getEnv("BUILDER_JOB_ANNOTATIONS", "")),
 		PodLabels:       parseKeyValueCSV(getEnv("BUILDER_POD_LABELS", "")),
 		PodAnnotations:  parseKeyValueCSV(getEnv("BUILDER_POD_ANNOTATIONS", "")),
+		BuilderPodRunAsNonRoot:   getEnv("BUILDER_POD_RUN_AS_NON_ROOT", "true") == "true",
+		BuilderPodRunAsUser:      parseInt64Env("BUILDER_POD_RUN_AS_USER", 1000),
+		BuilderPodSeccompProfile: getEnv("BUILDER_POD_SECCOMP_PROFILE", "RuntimeDefault"),
 	}
 }
 
@@ -113,6 +122,13 @@ func splitCSV(s string) []string {
 		}
 	}
 	return out
+}
+
+func parseInt64Env(key string, fallback int64) int64 {
+	if n, err := strconv.ParseInt(os.Getenv(key), 10, 64); err == nil {
+		return n
+	}
+	return fallback
 }
 
 func parseKeyValueCSV(s string) map[string]string {

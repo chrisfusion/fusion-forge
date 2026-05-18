@@ -126,6 +126,9 @@ flux/                      # Flux GitOps — sources/, environments/dev|staging|
 | `BUILDER_JOB_ANNOTATIONS` | _(empty)_ | Comma-separated `KEY=VALUE` annotations added to every builder Job (operator only; system annotations win) |
 | `BUILDER_POD_LABELS` | _(empty)_ | Comma-separated `KEY=VALUE` labels added to every builder Pod template (operator only; system labels win) |
 | `BUILDER_POD_ANNOTATIONS` | _(empty)_ | Comma-separated `KEY=VALUE` annotations added to every builder Pod template (operator only) |
+| `BUILDER_POD_RUN_AS_NON_ROOT` | `true` | Pod-level `runAsNonRoot` for builder Jobs (operator only) |
+| `BUILDER_POD_RUN_AS_USER` | `1000` | Pod-level `runAsUser` UID for builder Jobs; `0` = not set (operator only) |
+| `BUILDER_POD_SECCOMP_PROFILE` | `RuntimeDefault` | Pod-level seccomp profile type (`RuntimeDefault`, `Localhost/...`); empty = not set (operator only) |
 
 ## CIBuild CRD (`build.fusion-platform.io/v1alpha1`)
 

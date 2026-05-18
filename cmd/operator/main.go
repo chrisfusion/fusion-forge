@@ -68,12 +68,15 @@ func main() {
 	}
 
 	if err := (&controller.CIBuildReconciler{
-		Client:         mgr.GetClient(),
-		Scheme:         mgr.GetScheme(),
-		JobLabels:      cfg.JobLabels,
-		JobAnnotations: cfg.JobAnnotations,
-		PodLabels:      cfg.PodLabels,
-		PodAnnotations: cfg.PodAnnotations,
+		Client:            mgr.GetClient(),
+		Scheme:            mgr.GetScheme(),
+		JobLabels:         cfg.JobLabels,
+		JobAnnotations:    cfg.JobAnnotations,
+		PodLabels:         cfg.PodLabels,
+		PodAnnotations:    cfg.PodAnnotations,
+		PodRunAsNonRoot:   cfg.BuilderPodRunAsNonRoot,
+		PodRunAsUser:      cfg.BuilderPodRunAsUser,
+		PodSeccompProfile: cfg.BuilderPodSeccompProfile,
 	}).SetupWithManager(mgr); err != nil {
 		logger.Error(err, "unable to set up CIBuild controller")
 		os.Exit(1)

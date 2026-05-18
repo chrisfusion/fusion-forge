@@ -101,5 +101,15 @@ spec:
             - name: BUILDER_POD_ANNOTATIONS
               value: {{ include "fusion-forge.mapToKeyValueCSV" . | quote }}
             {{- end }}
+            {{- with .Values.operator.config.builderPodSecurityContext }}
+            - name: BUILDER_POD_RUN_AS_NON_ROOT
+              value: {{ .runAsNonRoot | quote }}
+            - name: BUILDER_POD_RUN_AS_USER
+              value: {{ .runAsUser | quote }}
+            {{- with .seccompProfile }}
+            - name: BUILDER_POD_SECCOMP_PROFILE
+              value: {{ .type | quote }}
+            {{- end }}
+            {{- end }}
           resources:
             {{- toYaml .Values.operator.resources | nindent 12 }}

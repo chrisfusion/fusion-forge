@@ -27,6 +27,11 @@ type BuildOptions struct {
 	JobAnnotations map[string]string
 	PodLabels      map[string]string
 	PodAnnotations map[string]string
+
+	// Pod-level security context fields. Zero values are ignored (not set on the pod spec).
+	PodRunAsNonRoot   bool
+	PodRunAsUser      int64  // 0 = not set
+	PodSeccompProfile string // "" = not set; e.g. "RuntimeDefault"
 }
 
 // mergeWithSystemWin merges extra into system, with system entries always taking priority.
@@ -103,6 +108,21 @@ func BuildJob(ciBuild *buildv1alpha1.CIBuild, configMapName string, opts BuildOp
 		},
 	}
 
+	// Pod-level security context — runAsNonRoot, runAsUser, and seccompProfile live here
+	// so they apply uniformly to the pod rather than per-container.
+	podSecCtx := &corev1.PodSecurityContext{}
+	runAsNonRoot := opts.PodRunAsNonRoot
+	podSecCtx.RunAsNonRoot = &runAsNonRoot
+	if opts.PodRunAsUser > 0 {
+		runAsUser := opts.PodRunAsUser
+		podSecCtx.RunAsUser = &runAsUser
+	}
+	if opts.PodSeccompProfile != "" {
+		podSecCtx.SeccompProfile = &corev1.SeccompProfile{
+			Type: corev1.SeccompProfileType(opts.PodSeccompProfile),
+		}
+	}
+
 	// Base env vars injected by the operator; Spec.Env adds build-specific ones.
 	baseEnv := []corev1.EnvVar{
 		{Name: "INDEX_BACKEND_URL", Value: ciBuild.Spec.IndexBackendURL},
@@ -167,6 +187,7 @@ func BuildJob(ciBuild *buildv1alpha1.CIBuild, configMapName string, opts BuildOp
 					Annotations: mergeWithSystemWin(opts.PodAnnotations, podSystemAnnotations),
 				},
 				Spec: corev1.PodSpec{
+					SecurityContext:    podSecCtx,
 					RestartPolicy:      corev1.RestartPolicyNever,
 					ServiceAccountName: builderSA,
 					Containers: []corev1.Container{

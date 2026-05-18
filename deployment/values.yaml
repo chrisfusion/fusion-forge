@@ -147,6 +147,15 @@ operator:
     #     vault.hashicorp.com/agent-inject: "false"
     builderPodAnnotations: {}
 
+    # Pod-level security context applied to every builder Job pod.
+    # runAsUser: 0 disables explicit UID setting (uses container image default).
+    # seccompProfile: omit or set type: "" to disable seccomp enforcement.
+    builderPodSecurityContext:
+      runAsNonRoot: true
+      runAsUser: 1000
+      seccompProfile:
+        type: RuntimeDefault
+
 # -----------------------------------------------------------------------------
 # Authentication — K8s SA TokenReview
 #
