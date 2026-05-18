@@ -97,7 +97,11 @@ spec:
             - name: BUILDER_POD_LABELS
               value: {{ include "fusion-forge.mapToKeyValueCSV" . | quote }}
             {{- end }}
-            {{- with .Values.operator.config.builderPodAnnotations }}
+            {{- $builderPodAnno := merge (dict) (.Values.operator.config.builderPodAnnotations | default dict) }}
+            {{- if and .Values.linkerd.builderInject (not (hasKey $builderPodAnno "linkerd.io/inject")) }}
+            {{- $_ := set $builderPodAnno "linkerd.io/inject" .Values.linkerd.builderInject }}
+            {{- end }}
+            {{- with $builderPodAnno }}
             - name: BUILDER_POD_ANNOTATIONS
               value: {{ include "fusion-forge.mapToKeyValueCSV" . | quote }}
             {{- end }}

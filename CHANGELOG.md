@@ -9,6 +9,14 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [0.7.1] — 2026-05-18
+
+### Added
+- `linkerd.builderInject` Helm value — when set to `"disabled"`, adds `linkerd.io/inject: disabled` to builder Job pod annotations to prevent Job-completion hangs when the namespace has automatic Linkerd sidecar injection (the sidecar keeps running after the build exits and blocks Job completion); explicit `builderPodAnnotations` entries take precedence for the same key
+- Note: large upload failures between builder and fusion-index are fixed by `linkerd.opaquePorts: "8080"` in the fusion-index chart (keeps mTLS), not by this value
+
+---
+
 ## [0.7.0] — 2026-05-18
 
 ### Added

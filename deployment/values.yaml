@@ -157,6 +157,28 @@ operator:
         type: RuntimeDefault
 
 # -----------------------------------------------------------------------------
+# Linkerd service mesh integration
+#
+# builderInject: controls the linkerd.io/inject annotation on builder Job pods.
+#
+# This is a Job-COMPLETION concern, not an upload fix.
+# Large upload failures (builder → fusion-index) must be fixed by setting
+# linkerd.opaquePorts: "8080" in the fusion-index Helm chart — that keeps
+# full Linkerd mTLS and observability while switching the tunnel to TCP.
+#
+# The Job-completion problem: when a namespace has automatic Linkerd injection
+# the sidecar keeps running after the build binary exits, so the Job never
+# reaches Completed and hangs indefinitely.
+#
+#   "disabled" — skip sidecar injection on builder Jobs. Loses mTLS and
+#                Linkerd metrics for builds. Only use if native sidecar
+#                support (K8s 1.29+) or linkerd-await is not available.
+#   ""         — use the namespace default (no annotation added).
+# -----------------------------------------------------------------------------
+linkerd:
+  builderInject: ""   # "disabled" | "" (namespace default)
+
+# -----------------------------------------------------------------------------
 # Authentication — K8s SA TokenReview
 #
 # When enabled the server calls the cluster TokenReview API to validate every
