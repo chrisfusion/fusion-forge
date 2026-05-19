@@ -6,7 +6,8 @@ package main
 import (
 	"context"
 	"fmt"
-	"log"
+	"log/slog"
+	"os"
 
 	"github.com/golang-migrate/migrate/v4"
 	_ "github.com/golang-migrate/migrate/v4/database/postgres"
@@ -38,18 +39,21 @@ func init() {
 
 func main() {
 	cfg := appconfig.Load()
+	setupLogger(cfg)
 
 	// Database
 	pool, err := pgxpool.New(context.Background(), cfg.DBURL())
 	if err != nil {
-		log.Fatalf("connect to database: %v", err)
+		slog.Error("connect to database", "error", err)
+		os.Exit(1)
 	}
 	defer pool.Close()
 
 	if err := pool.Ping(context.Background()); err != nil {
-		log.Fatalf("ping database: %v", err)
+		slog.Error("ping database", "error", err)
+		os.Exit(1)
 	}
-	log.Println("database connected")
+	slog.Info("database connected")
 
 	runMigrations(cfg.DBURL())
 	queries := db.New(pool)
@@ -62,53 +66,94 @@ func main() {
 
 	// Validation rules
 	rules := validation.LoadRules(cfg.RulesFile)
-	log.Printf("forge: loaded validation rules (exactPin=%v, maxPkg=%d, banned=%d)",
-		rules.RequireExactPinning, rules.MaxPackages, len(rules.BannedPackages))
+	slog.Info("loaded validation rules",
+		"exact_pinning", rules.RequireExactPinning,
+		"max_packages", rules.MaxPackages,
+		"banned_count", len(rules.BannedPackages))
 
 	gitRules := validation.LoadGitRules(cfg.GitRulesFile)
-	log.Printf("forge: loaded git rules (requirePyproject=%v, requireSrc=%v)",
-		gitRules.RequirePyprojectToml, gitRules.RequireSrcDir)
+	slog.Info("loaded git rules",
+		"require_pyproject", gitRules.RequirePyprojectToml,
+		"require_src_dir", gitRules.RequireSrcDir)
 
 	// HTTP server
 	router := api.NewRouter(pool, queries, k8sCRClient, kubeClient, indexClient, rules, gitRules, cfg)
 	addr := fmt.Sprintf(":%s", cfg.Port)
-	log.Printf("starting fusion-forge server on %s", addr)
+	slog.Info("starting fusion-forge server", "addr", addr)
 	if err := router.Run(addr); err != nil {
-		log.Fatalf("server error: %v", err)
+		slog.Error("server error", "error", err)
+		os.Exit(1)
+	}
+}
+
+func setupLogger(cfg *appconfig.Config) {
+	var level slog.Level
+	unknownLevel := false
+	switch cfg.LogLevel {
+	case "debug":
+		level = slog.LevelDebug
+	case "warn":
+		level = slog.LevelWarn
+	case "error":
+		level = slog.LevelError
+	case "info", "":
+		level = slog.LevelInfo
+	default:
+		level = slog.LevelInfo
+		unknownLevel = true
+	}
+
+	opts := &slog.HandlerOptions{Level: level}
+	var handler slog.Handler
+	if cfg.LogFormat == "text" {
+		handler = slog.NewTextHandler(os.Stdout, opts)
+	} else {
+		handler = slog.NewJSONHandler(os.Stdout, opts)
+	}
+	slog.SetDefault(slog.New(handler))
+
+	if unknownLevel {
+		slog.Warn("unrecognised LOG_LEVEL, defaulting to info", "value", cfg.LogLevel)
 	}
 }
 
 func runMigrations(dbURL string) {
 	src, err := iofs.New(migrationsFS.FS, ".")
 	if err != nil {
-		log.Fatalf("create migration source: %v", err)
+		slog.Error("create migration source", "error", err)
+		os.Exit(1)
 	}
 	m, err := migrate.NewWithSourceInstance("iofs", src, dbURL)
 	if err != nil {
-		log.Fatalf("create migrator: %v", err)
+		slog.Error("create migrator", "error", err)
+		os.Exit(1)
 	}
 	defer m.Close()
 	if err := m.Up(); err != nil && err != migrate.ErrNoChange {
-		log.Fatalf("run migrations: %v", err)
+		slog.Error("run migrations", "error", err)
+		os.Exit(1)
 	}
-	log.Println("migrations applied")
+	slog.Info("migrations applied")
 }
 
 // buildK8sClients sets up the controller-runtime CR client and the typed kubernetes client.
 func buildK8sClients() (client.Client, kubernetes.Interface) {
 	k8sCfg, err := ctrl.GetConfig()
 	if err != nil {
-		log.Fatalf("get kubernetes config: %v", err)
+		slog.Error("get kubernetes config", "error", err)
+		os.Exit(1)
 	}
 
 	crClient, err := client.New(k8sCfg, client.Options{Scheme: scheme})
 	if err != nil {
-		log.Fatalf("create CR client: %v", err)
+		slog.Error("create CR client", "error", err)
+		os.Exit(1)
 	}
 
 	kubeClient, err := kubernetes.NewForConfig(k8sCfg)
 	if err != nil {
-		log.Fatalf("create kubernetes client: %v", err)
+		slog.Error("create kubernetes client", "error", err)
+		os.Exit(1)
 	}
 
 	return crClient, kubeClient

@@ -56,6 +56,10 @@ type Config struct {
 	BuilderPodRunAsNonRoot   bool
 	BuilderPodRunAsUser      int64  // 0 = not set
 	BuilderPodSeccompProfile string // "" = not set; e.g. "RuntimeDefault"
+
+	// Logging
+	LogLevel  string // "debug" | "info" | "warn" | "error"
+	LogFormat string // "json" | "text"
 }
 
 // Load reads configuration from environment variables with sensible defaults.
@@ -85,6 +89,8 @@ func Load() *Config {
 		BuilderPodRunAsNonRoot:   getEnv("BUILDER_POD_RUN_AS_NON_ROOT", "true") == "true",
 		BuilderPodRunAsUser:      parseInt64Env("BUILDER_POD_RUN_AS_USER", 1000),
 		BuilderPodSeccompProfile: getEnv("BUILDER_POD_SECCOMP_PROFILE", "RuntimeDefault"),
+		LogLevel:                 getEnv("LOG_LEVEL", "info"),
+		LogFormat:                getEnv("LOG_FORMAT", "json"),
 	}
 }
 

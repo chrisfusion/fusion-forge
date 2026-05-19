@@ -5,7 +5,7 @@ package validation
 
 import (
 	_ "embed"
-	"log"
+	"log/slog"
 	"os"
 
 	"gopkg.in/yaml.v3"
@@ -23,7 +23,7 @@ func LoadRules(path string) Rules {
 	if path != "" {
 		b, err := os.ReadFile(path)
 		if err != nil {
-			log.Printf("forge: cannot read rules file %q, using defaults: %v", path, err)
+			slog.Warn("cannot read rules file, using defaults", "path", path, "error", err)
 		} else {
 			data = b
 		}
@@ -33,7 +33,7 @@ func LoadRules(path string) Rules {
 	}
 
 	if err := yaml.Unmarshal(data, &rules); err != nil {
-		log.Printf("forge: cannot parse rules YAML, using defaults: %v", err)
+		slog.Warn("cannot parse rules YAML, using defaults", "error", err)
 		return DefaultRules()
 	}
 	return rules

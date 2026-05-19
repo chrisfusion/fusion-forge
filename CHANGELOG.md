@@ -7,6 +7,12 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+### Added
+- Structured logging via `log/slog` throughout the server binary: JSON output by default, configurable via `LOG_FORMAT=json|text` and `LOG_LEVEL=debug|info|warn|error` env vars (both wired through Helm `server.config.logLevel` / `server.config.logFormat`)
+- `internal/api/middleware/logging.go`: Gin middleware that generates a per-request ID, stamps a child `*slog.Logger` with `{request_id, method, path, client_ip}`, stores it in `gin.Context`, and logs the access line (status + latency) after each handler returns
+- All 500-class errors now logged: `internalError()` logs via the per-request logger before writing the HTTP response; handler-level errors (artifact registry calls, CIBuild CR creation, status sync) log with structured fields including `build_id`, `name`, `version`
+- Startup sequence (DB connect/ping, migrations, rules loading, K8s client setup) logged as structured events at INFO level
+
 ---
 
 ## [0.7.2] — 2026-05-18

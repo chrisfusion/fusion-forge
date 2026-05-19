@@ -20,3 +20,5 @@ data:
   AUTH_ENABLED: {{ .Values.server.config.authEnabled | quote }}
   AUTH_AUDIENCE: {{ .Values.server.config.authAudience | quote }}
   AUTH_ALLOWED_SA: {{ .Values.server.config.authAllowedSAs | quote }}
+  LOG_LEVEL: {{ .Values.server.config.logLevel | quote }}
+  LOG_FORMAT: {{ .Values.server.config.logFormat | quote }}

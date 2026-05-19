@@ -7,7 +7,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log"
 	"net/http"
 	"path/filepath"
 	"strings"
@@ -23,6 +22,7 @@ import (
 
 	buildv1alpha1 "fusion-platform.io/fusion-forge/api/v1alpha1"
 	"fusion-platform.io/fusion-forge/internal/api/dto"
+	"fusion-platform.io/fusion-forge/internal/api/middleware"
 	"fusion-platform.io/fusion-forge/internal/config"
 	"fusion-platform.io/fusion-forge/internal/db"
 	"fusion-platform.io/fusion-forge/internal/gitutil"
@@ -127,7 +127,7 @@ func (h *GitBuildHandler) Create(c *gin.Context) {
 	fullName := indexclient.ArtifactFullName(req.Name)
 	artifactID, err := h.IndexClient.FindOrCreateArtifact(ctx, fullName, req.Description)
 	if err != nil {
-		log.Printf("forge: find/create artifact %q: %v", fullName, err)
+		middleware.LoggerFromCtx(c).Error("find/create artifact", "name", fullName, "error", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to register artifact in registry: " + err.Error()})
 		return
 	}
@@ -143,7 +143,7 @@ func (h *GitBuildHandler) Create(c *gin.Context) {
 	}
 
 	if err := h.IndexClient.CreateVersion(ctx, artifactID, req.Version, req.Description); err != nil {
-		log.Printf("forge: create version %s/%s in registry: %v", req.Name, req.Version, err)
+		middleware.LoggerFromCtx(c).Error("create version in registry", "name", req.Name, "version", req.Version, "error", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to create version in registry: " + err.Error()})
 		return
 	}
@@ -178,7 +178,7 @@ func (h *GitBuildHandler) Create(c *gin.Context) {
 
 	ciBuildName := fmt.Sprintf("forge-git-%d", buildID)
 	if err := h.DB.UpdateCIBuildName(ctx, buildID, ciBuildName); err != nil {
-		log.Printf("forge: update ci_build_name for git build %d: %v", buildID, err)
+		middleware.LoggerFromCtx(c).Error("update ci_build_name", "build_id", buildID, "error", err)
 		_ = h.DB.UpdateStatus(ctx, buildID, "FAILED")
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to record build name"})
 		return
@@ -215,7 +215,7 @@ func (h *GitBuildHandler) Create(c *gin.Context) {
 		},
 	}
 	if err := h.K8sCRClient.Create(ctx, &ciBuild); err != nil {
-		log.Printf("forge: create CIBuild CR %q: %v", ciBuildName, err)
+		middleware.LoggerFromCtx(c).Error("create CIBuild CR", "name", ciBuildName, "error", err)
 		_ = h.DB.UpdateStatus(ctx, buildID, "FAILED")
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to submit build job: " + err.Error()})
 		return
@@ -286,8 +286,8 @@ func (h *GitBuildHandler) Validate(c *gin.Context) {
 	fullName := indexclient.ArtifactFullName(req.Name)
 	artifactID, found, err := h.IndexClient.FindArtifact(ctx, fullName)
 	if err != nil {
-		log.Printf("forge: validate git build — find artifact %q: %v", fullName, err)
-		internalError(c, err)
+		middleware.LoggerFromCtx(c).Error("find artifact", "name", fullName, "error", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 	if found {
@@ -331,7 +331,7 @@ func (h *GitBuildHandler) Get(c *gin.Context) {
 	if build.CIBuildName != nil && (build.Status == "PENDING" || build.Status == "BUILDING") {
 		if newStatus, synced := syncStatusFromCR(ctx, h.K8sCRClient, h.Cfg.K8sNamespace, *build.CIBuildName); synced && newStatus != build.Status {
 			if err := h.DB.UpdateStatus(ctx, id, newStatus); err != nil {
-				log.Printf("forge: sync status for git build %d: %v", id, err)
+				middleware.LoggerFromCtx(c).Warn("sync status failed", "build_id", id, "error", err)
 			} else {
 				build.Status = newStatus
 			}

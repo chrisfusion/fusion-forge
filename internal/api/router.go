@@ -32,6 +32,7 @@ func NewRouter(
 ) *gin.Engine {
 	r := gin.New()
 	r.Use(gin.Recovery())
+	r.Use(middleware.NewLoggingMiddleware())
 	r.Use(corsMiddleware())
 
 	// Health probes (compatible with Quarkus Smallrye Health path convention).

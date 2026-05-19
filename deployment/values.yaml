@@ -76,6 +76,10 @@ server:
     authAudience: ""
     # Comma-separated namespace/name list of allowed service accounts. Empty = any valid SA.
     authAllowedSAs: ""
+    # Log level: debug | info | warn | error
+    logLevel: "info"
+    # Log format: json | text
+    logFormat: "json"
 
 # -----------------------------------------------------------------------------
 # Operator — CIBuild reconciler (cmd/operator)

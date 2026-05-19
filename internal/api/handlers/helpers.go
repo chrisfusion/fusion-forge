@@ -21,9 +21,11 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	buildv1alpha1 "fusion-platform.io/fusion-forge/api/v1alpha1"
+	"fusion-platform.io/fusion-forge/internal/api/middleware"
 )
 
 func internalError(c *gin.Context, err error) {
+	middleware.LoggerFromCtx(c).Error("internal error", "error", err)
 	c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 }
 

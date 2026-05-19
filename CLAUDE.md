@@ -66,6 +66,7 @@ internal/
   indexclient/client.go    # HTTP client for fusion-index (find/create artifact, version, upload file)
   api/
     middleware/auth.go     # K8s SA TokenReview auth (port from fusion-index)
+    middleware/logging.go  # per-request slog middleware; exports NewLoggingMiddleware + LoggerFromCtx
     dto/
       requests.go          # CreateVenvRequest (multipart), CreateGitBuildRequest
       responses.go         # VenvBuildResponse, PageResponse, ValidationResponse
@@ -129,6 +130,8 @@ flux/                      # Flux GitOps — sources/, environments/dev|staging|
 | `BUILDER_POD_RUN_AS_NON_ROOT` | `true` | Pod-level `runAsNonRoot` for builder Jobs (operator only) |
 | `BUILDER_POD_RUN_AS_USER` | `1000` | Pod-level `runAsUser` UID for builder Jobs; `0` = not set (operator only) |
 | `BUILDER_POD_SECCOMP_PROFILE` | `RuntimeDefault` | Pod-level seccomp profile type (`RuntimeDefault`, `Localhost/...`); empty = not set (operator only) |
+| `LOG_LEVEL` | `info` | Server log level: `debug` \| `info` \| `warn` \| `error`; invalid value warns and falls back to `info` |
+| `LOG_FORMAT` | `json` | Server log format: `json` (default, for Loki/ELK) \| `text` (local dev) |
 
 ## CIBuild CRD (`build.fusion-platform.io/v1alpha1`)
 
@@ -229,6 +232,18 @@ status:
 - **Builder Dockerfile runs as UID 1000**: `builder/Dockerfile` and `Dockerfile.py310` create a `builder` user (UID 1000) and `chown 1000:1000 /workspace` — required because the pod security context defaults to `runAsUser: 1000`; if you change the UID in `builderPodSecurityContext.runAsUser`, update both Dockerfiles to match
 - **`UploadFile` in indexclient requires exact `size`**: signature is `UploadFile(ctx, artifactID, semver, filename, data io.Reader, size int64)` — `size` must be the exact readable byte count of `data`; it is used to set `Content-Length` so the body streams without buffering; a mismatch silently corrupts the request body at the receiver
 - **Linkerd: `builderInject` is for Job completion, not upload fix**: `linkerd.builderInject: "disabled"` prevents Job-completion hangs (Linkerd sidecar outlives the builder binary and blocks the Job from reaching `Completed`); it does NOT fix large upload failures; for uploads >~2 MB through Linkerd, set `linkerd.opaquePorts: "8080"` in the fusion-index Helm chart — that switches to raw mTLS TCP (keeps full Linkerd observability)
+
+## Logging
+
+- **Backend**: `log/slog` (stdlib) — `import "log"` is banned; never use `log.Printf` / `log.Fatalf` in server code
+- **Setup**: `setupLogger(cfg)` in `cmd/server/main.go` must be the **first** call in `main()` — reads `LOG_LEVEL` + `LOG_FORMAT` from config
+- **In handlers**: always use `middleware.LoggerFromCtx(c)`, never bare `slog.Info/Error` — bare calls lose `request_id`, `method`, `path` context fields
+- **`internalError` already logs**: it calls `middleware.LoggerFromCtx(c).Error(...)` before writing the HTTP response — do NOT also call an explicit slog before passing the same error to `internalError` (double-log)
+- **Explicit log vs internalError**: use explicit `middleware.LoggerFromCtx(c).Error(...) + c.JSON(...)` when you have extra structured fields worth capturing (artifact name, build ID, etc.); use `internalError(c, err)` alone when the error message is sufficient
+- **Startup / background code**: use global `slog.Info/Warn/Error` (no gin context); fatal startup errors use `slog.Error(...); os.Exit(1)` — slog has no `Fatalf`
+- **Builder binary** (`builder/main.go`): intentionally keeps stdlib `log` — its stdout is the pod logs API response (`GET /venvs/:id/logs`); do not convert it to slog
+- **Operator** (`cmd/operator/main.go`): intentionally keeps `logr`/`zap` via controller-runtime — do not bridge to slog
+- **Helm**: `logLevel` / `logFormat` under `server.config` in `values.yaml` → `LOG_LEVEL` / `LOG_FORMAT` in `server-configmap.yaml` → injected via `envFrom` in the deployment template
 
 ## Migrations
 

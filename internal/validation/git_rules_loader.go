@@ -5,7 +5,7 @@ package validation
 
 import (
 	_ "embed"
-	"log"
+	"log/slog"
 	"os"
 
 	"gopkg.in/yaml.v3"
@@ -23,7 +23,7 @@ func LoadGitRules(path string) GitRules {
 	if path != "" {
 		b, err := os.ReadFile(path)
 		if err != nil {
-			log.Printf("forge: cannot read git rules file %q, using defaults: %v", path, err)
+			slog.Warn("cannot read git rules file, using defaults", "path", path, "error", err)
 		} else {
 			data = b
 		}
@@ -33,7 +33,7 @@ func LoadGitRules(path string) GitRules {
 	}
 
 	if err := yaml.Unmarshal(data, &rules); err != nil {
-		log.Printf("forge: cannot parse git rules YAML, using defaults: %v", err)
+		slog.Warn("cannot parse git rules YAML, using defaults", "error", err)
 		return DefaultGitRules()
 	}
 	return rules
