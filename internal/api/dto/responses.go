@@ -30,6 +30,8 @@ type VenvBuildResponse struct {
 	MetadataSource       string     `json:"metadataSource,omitempty"`
 	ProjectDir           *string    `json:"projectDir,omitempty"`
 	PythonVersion        string     `json:"pythonVersion"`
+	Runner               *string    `json:"runner,omitempty"`
+	BaseDependenciesURL  *string    `json:"baseDependenciesUrl,omitempty"`
 	CreatedAt            time.Time  `json:"createdAt"`
 	UpdatedAt            time.Time  `json:"updatedAt"`
 }
@@ -54,6 +56,8 @@ func ToResponse(b db.VenvBuild) VenvBuildResponse {
 		MetadataSource:       b.MetadataSource,
 		ProjectDir:           b.ProjectDir,
 		PythonVersion:        b.PythonVersion,
+		Runner:               b.Runner,
+		BaseDependenciesURL:  b.BaseDependenciesURL,
 		CreatedAt:            b.CreatedAt,
 		UpdatedAt:            b.UpdatedAt,
 	}

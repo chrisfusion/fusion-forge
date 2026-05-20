@@ -8,6 +8,16 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ## [Unreleased]
 
 ### Added
+- **App build type** (`POST /api/v1/appbuilds`): new builder that clones a git repository containing `metadata.yaml` + `requirements.txt` + `main.py`, optionally layers requirements on top of a base venvpack (from `metadata.yaml`'s `basedependencies` URL), and uploads three files to fusion-index under an `app.{name}` artifact: the venvpack archive, `main.py`, and `metadata.yaml`
+- `internal/gitutil/metadata.go`: in-memory git clone + YAML parse of `metadata.yaml`; extracts `name`, `version`, `builderImage`, `basedependencies`, and `runner`
+- `api/v1alpha1`: `AppSourceSpec` struct and `"app"` added to `BuildType` enum; CRD YAML updated accordingly
+- **Unified builder image config via K8s ConfigMap**: all build types (requirements, git, app) now look up their builder image by key from a dedicated `{release-name}-builder-images` ConfigMap, replacing the `BUILDER_IMAGE` / `BUILDER_IMAGE_PY310` env vars; keys for requirements/git builds remain the `python_version` strings (`"3.12"`, `"3.10"`); app builds use the `builderImage` key from `metadata.yaml`
+- `deployment/values.yaml`: new top-level `builderImages` map replaces `server.config.builderImage` / `server.config.builderImagePy310`; new Helm template `configmap-builder-images.yaml` renders it as a K8s ConfigMap
+- `deployment/templates/server-deployment.yaml`: `checksum/builder-images` pod annotation ensures the server pod restarts automatically when `builderImages` changes
+- `deployment/templates/rbac.yaml`: server Role gains `configmaps: get` to allow reading the builder-images ConfigMap at startup
+- DB migration `000006`: adds `runner` and `base_dependencies_url` columns to `venv_build`
+- `runner` and `baseDependenciesUrl` fields in `VenvBuildResponse`
+
 - Structured logging via `log/slog` throughout the server binary: JSON output by default, configurable via `LOG_FORMAT=json|text` and `LOG_LEVEL=debug|info|warn|error` env vars (both wired through Helm `server.config.logLevel` / `server.config.logFormat`)
 - `internal/api/middleware/logging.go`: Gin middleware that generates a per-request ID, stamps a child `*slog.Logger` with `{request_id, method, path, client_ip}`, stores it in `gin.Context`, and logs the access line (status + latency) after each handler returns
 - All 500-class errors now logged: `internalError()` logs via the per-request logger before writing the HTTP response; handler-level errors (artifact registry calls, CIBuild CR creation, status sync) log with structured fields including `build_id`, `name`, `version`

@@ -65,6 +65,14 @@ func NewRouter(
 		Cfg:         cfg,
 	}
 
+	ah := &handlers.AppBuildHandler{
+		DB:          queries,
+		K8sCRClient: k8sCRClient,
+		KubeClient:  kubeClient,
+		IndexClient: indexClient,
+		Cfg:         cfg,
+	}
+
 	v1 := r.Group("/api/v1")
 	v1.Use(middleware.NewAuthMiddleware(cfg))
 
@@ -79,6 +87,12 @@ func NewRouter(
 	v1.POST("/gitbuilds/validate", gh.Validate)
 	v1.GET("/gitbuilds/:id", gh.Get)
 	v1.GET("/gitbuilds/:id/logs", gh.GetLogs)
+
+	v1.GET("/appbuilds", ah.List)
+	v1.POST("/appbuilds", ah.Create)
+	v1.POST("/appbuilds/validate", ah.Validate)
+	v1.GET("/appbuilds/:id", ah.Get)
+	v1.GET("/appbuilds/:id/logs", ah.GetLogs)
 
 	return r
 }

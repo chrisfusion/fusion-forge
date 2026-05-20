@@ -137,6 +137,16 @@ func BuildJob(ciBuild *buildv1alpha1.CIBuild, configMapName string, opts BuildOp
 			corev1.EnvVar{Name: "GIT_PROJECT_DIR", Value: gs.ProjectDir},
 		)
 	}
+	// For app builds inject AppSource fields as env vars so the builder binary can read them.
+	if ciBuild.Spec.BuildType == "app" && ciBuild.Spec.AppSource != nil {
+		as := ciBuild.Spec.AppSource
+		baseEnv = append(baseEnv,
+			corev1.EnvVar{Name: "GIT_REPO_URL", Value: as.URL},
+			corev1.EnvVar{Name: "GIT_REF", Value: as.Ref},
+			corev1.EnvVar{Name: "GIT_PROJECT_DIR", Value: as.ProjectDir},
+			corev1.EnvVar{Name: "APP_BASE_DEPENDENCIES", Value: as.BaseDependencies},
+		)
+	}
 	env := append(baseEnv, ciBuild.Spec.Env...)
 
 	// Only declare the ConfigMap volume when there are files to mount.

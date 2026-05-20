@@ -10,7 +10,7 @@
 //	ARTIFACT_ID         Numeric ID of the artifact in fusion-index.
 //	ARTIFACT_VERSION    Semver version string (e.g. "1.2.3").
 //	VENV_NAME           Package name used for naming the archive.
-//	BUILD_TYPE          "requirements" (default) or "git".
+//	BUILD_TYPE          "requirements" (default), "git", or "app".
 //
 // Additional variables for BUILD_TYPE=git:
 //
@@ -23,6 +23,16 @@
 //	                        as a second artefact alongside the venv archive.
 //	REQUIRE_PYPROJECT_TOML  "true"/"false" — enforce pyproject.toml presence (default: "true").
 //	REQUIRE_SRC_DIR         "true"/"false" — enforce src/ directory presence (default: "true").
+//
+// Additional variables for BUILD_TYPE=app:
+//
+//	GIT_REPO_URL            HTTPS URL of the git repository to clone.
+//	GIT_REF                 Branch or tag to check out (default: "main").
+//	GIT_PROJECT_DIR         Optional: relative path within the repo for monorepo support.
+//	APP_BASE_DEPENDENCIES   Optional: URL of an existing venvpack to use as base.
+//	                        When set, the venvpack is downloaded and extracted; the project's
+//	                        requirements.txt is installed on top. When empty, a fresh venv is built.
+//	                        An unreachable URL causes the build to fail.
 package main
 
 import (
@@ -76,6 +86,8 @@ func main() {
 	switch buildType {
 	case "git":
 		buildFromGit(ctx, uploadURL, archiveName, archivePath)
+	case "app":
+		buildFromApp(ctx, uploadURL, archiveName, archivePath)
 	default:
 		buildFromRequirements(ctx, uploadURL, archiveName, archivePath)
 	}
@@ -274,6 +286,114 @@ func uploadFile(ctx context.Context, uploadURL, filename, path string) error {
 		}
 	}
 	return nil
+}
+
+// buildFromApp clones a git repository containing metadata.yaml + requirements.txt + main.py,
+// optionally downloads and extracts a base venvpack, installs project requirements on top,
+// archives the venv, and uploads the venvpack, main.py, and metadata.yaml to fusion-index.
+func buildFromApp(ctx context.Context, uploadURL, archiveName, archivePath string) {
+	repoURL      := mustEnv("GIT_REPO_URL")
+	repoRef      := envDefault("GIT_REF", "main")
+	projectDir   := envDefault("GIT_PROJECT_DIR", "")
+	baseDepsURL  := envDefault("APP_BASE_DEPENDENCIES", "")
+
+	// Step 1: clone the repository.
+	log.Printf("[forge-builder] cloning %s @ %s", repoURL, repoRef)
+	run("git", "clone", "--single-branch", "--depth=1", "--branch", repoRef, repoURL, srcDir)
+
+	projectRoot := srcDir
+	if projectDir != "" {
+		projectRoot = filepath.Join(srcDir, projectDir)
+		log.Printf("[forge-builder] using project directory: %s", projectDir)
+	}
+
+	// Step 2: validate app structure.
+	validateAppStructure(projectRoot)
+
+	pip := filepath.Join(venvDir, "bin", "pip")
+
+	// Step 3: prepare the virtual environment.
+	if baseDepsURL != "" {
+		// Download and extract the base venvpack, then layer project requirements on top.
+		basePath := filepath.Join(workspace, "base.tar.gz")
+		log.Printf("[forge-builder] downloading base venvpack from %s", baseDepsURL)
+		downloadFile(ctx, baseDepsURL, basePath)
+		log.Println("[forge-builder] extracting base venvpack")
+		run("tar", "xzf", basePath, "-C", workspace)
+	} else {
+		// Build a fresh venv from scratch.
+		log.Println("[forge-builder] creating virtual environment")
+		run("python3", "-m", "venv", venvDir)
+		log.Println("[forge-builder] upgrading pip")
+		run(pip, "install", "--no-cache-dir", "--quiet", "--upgrade", "pip")
+	}
+
+	// Step 4: install project requirements into the venv.
+	reqFile := filepath.Join(projectRoot, "requirements.txt")
+	log.Println("[forge-builder] installing packages from requirements.txt")
+	run(pip, "install", "--no-cache-dir", "-r", reqFile)
+
+	// Step 5: archive and upload the venv.
+	archiveAndUpload(ctx, uploadURL, archiveName, archivePath)
+
+	// Step 6: upload main.py.
+	mainPyPath := filepath.Join(projectRoot, "main.py")
+	fi, err := os.Stat(mainPyPath)
+	if err != nil {
+		log.Fatalf("[forge-builder] main.py not found: %v", err)
+	}
+	log.Printf("[forge-builder] uploading main.py (%d bytes)", fi.Size())
+	if err := uploadFile(ctx, uploadURL, "main.py", mainPyPath); err != nil {
+		log.Fatalf("[forge-builder] main.py upload failed: %v", err)
+	}
+
+	// Step 7: upload metadata.yaml.
+	metaPath := filepath.Join(projectRoot, "metadata.yaml")
+	fi, err = os.Stat(metaPath)
+	if err != nil {
+		log.Fatalf("[forge-builder] metadata.yaml not found: %v", err)
+	}
+	log.Printf("[forge-builder] uploading metadata.yaml (%d bytes)", fi.Size())
+	if err := uploadFile(ctx, uploadURL, "metadata.yaml", metaPath); err != nil {
+		log.Fatalf("[forge-builder] metadata.yaml upload failed: %v", err)
+	}
+}
+
+// validateAppStructure checks that the repository contains the required app files.
+func validateAppStructure(repoDir string) {
+	log.Println("[forge-builder] validating app structure")
+	for _, name := range []string{"metadata.yaml", "requirements.txt", "main.py"} {
+		if _, err := os.Stat(filepath.Join(repoDir, name)); os.IsNotExist(err) {
+			log.Fatalf("[forge-builder] structure check failed: %s not found at project root", name)
+		}
+	}
+	log.Println("[forge-builder] app structure validation passed")
+}
+
+// downloadFile downloads the URL to destPath using a streaming HTTP GET.
+// Exits the process on any error.
+func downloadFile(ctx context.Context, rawURL, destPath string) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, rawURL, nil)
+	if err != nil {
+		log.Fatalf("[forge-builder] build download request: %v", err)
+	}
+	client := &http.Client{Timeout: 5 * time.Minute}
+	resp, err := client.Do(req)
+	if err != nil {
+		log.Fatalf("[forge-builder] download %s: %v", rawURL, err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		log.Fatalf("[forge-builder] download %s returned HTTP %d", rawURL, resp.StatusCode)
+	}
+	f, err := os.Create(destPath)
+	if err != nil {
+		log.Fatalf("[forge-builder] create download dest %s: %v", destPath, err)
+	}
+	defer f.Close()
+	if _, err := io.Copy(f, resp.Body); err != nil {
+		log.Fatalf("[forge-builder] write download %s: %v", destPath, err)
+	}
 }
 
 func mustEnv(key string) string {

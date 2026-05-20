@@ -233,6 +233,12 @@ func ArtifactFullName(name string) string {
 	return "venv." + name
 }
 
+// AppArtifactFullName returns the canonical fusion-index full_name for an app artifact.
+// Convention: "app.{name}" using dot-separated namespace.
+func AppArtifactFullName(name string) string {
+	return "app." + name
+}
+
 // ArchiveFilename returns the tar.gz filename for a given venv name and version.
 func ArchiveFilename(name, version string) string {
 	return filepath.Base(name) + "-" + version + ".tar.gz"

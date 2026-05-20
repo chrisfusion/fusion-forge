@@ -9,6 +9,8 @@ import (
 	"log/slog"
 	"os"
 
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+
 	"github.com/golang-migrate/migrate/v4"
 	_ "github.com/golang-migrate/migrate/v4/database/postgres"
 	"github.com/golang-migrate/migrate/v4/source/iofs"
@@ -60,6 +62,15 @@ func main() {
 
 	// Kubernetes client (reads/writes CIBuild CRs and pod logs).
 	k8sCRClient, kubeClient := buildK8sClients()
+
+	// Load builder images from the dedicated ConfigMap so all build types share one image map.
+	builderImages, err := loadBuilderImages(context.Background(), kubeClient, cfg.K8sNamespace, cfg.BuilderImagesCM)
+	if err != nil {
+		slog.Error("load builder images ConfigMap", "name", cfg.BuilderImagesCM, "error", err)
+		os.Exit(1)
+	}
+	cfg.BuilderImages = builderImages
+	slog.Info("loaded builder images", "count", len(builderImages))
 
 	// fusion-index client
 	indexClient := indexclient.New(cfg.IndexBackendURL)
@@ -134,6 +145,21 @@ func runMigrations(dbURL string) {
 		os.Exit(1)
 	}
 	slog.Info("migrations applied")
+}
+
+// loadBuilderImages reads key→image-URL pairs from a K8s ConfigMap.
+func loadBuilderImages(ctx context.Context, kubeClient kubernetes.Interface, namespace, cmName string) (map[string]string, error) {
+	cm, err := kubeClient.CoreV1().ConfigMaps(namespace).Get(ctx, cmName, metav1.GetOptions{})
+	if err != nil {
+		return nil, fmt.Errorf("get ConfigMap %s/%s: %w", namespace, cmName, err)
+	}
+	images := make(map[string]string, len(cm.Data))
+	for k, v := range cm.Data {
+		if v != "" {
+			images[k] = v
+		}
+	}
+	return images, nil
 }
 
 // buildK8sClients sets up the controller-runtime CR client and the typed kubernetes client.

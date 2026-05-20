@@ -97,6 +97,12 @@ func (h *VenvHandler) Create(c *gin.Context) {
 		return
 	}
 
+	builderImage, err := h.Cfg.BuilderImageFor(pythonVersion)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
 	requirementsTxt, ok := readRequirementsFile(c, req)
 	if !ok {
 		return
@@ -177,7 +183,7 @@ func (h *VenvHandler) Create(c *gin.Context) {
 			Namespace: h.Cfg.K8sNamespace,
 		},
 		Spec: buildv1alpha1.CIBuildSpec{
-			BuilderImage:    h.Cfg.BuilderImageForVersion(pythonVersion),
+			BuilderImage:    builderImage,
 			IndexBackendURL: h.Cfg.IndexBackendURL,
 			BuildType:       "requirements",
 			ArtifactName:    req.Name,

@@ -19,6 +19,25 @@ const (
 	CIBuildPhaseFailed    CIBuildPhase = "Failed"
 )
 
+// AppSourceSpec specifies the git repository and app-specific fields for an app build.
+type AppSourceSpec struct {
+	// URL is the HTTPS git clone URL of the repository.
+	URL string `json:"url"`
+
+	// Ref is the branch or tag to check out. Defaults to "main".
+	// +optional
+	Ref string `json:"ref,omitempty"`
+
+	// ProjectDir is an optional relative path to the app project within the repository.
+	// +optional
+	ProjectDir string `json:"projectDir,omitempty"`
+
+	// BaseDependencies is the optional URL of a base venvpack to layer project requirements on top of.
+	// When empty the venv is built from scratch using the project's requirements.txt.
+	// +optional
+	BaseDependencies string `json:"baseDependencies,omitempty"`
+}
+
 // GitSourceSpec specifies the git repository to clone for a git build.
 type GitSourceSpec struct {
 	// URL is the https git clone URL of the repository.
@@ -64,15 +83,20 @@ type CIBuildSpec struct {
 	Description string `json:"description,omitempty"`
 
 	// BuildType identifies the build mode.
-	// "requirements" (default) installs from a requirements.txt supplied via ConfigData.
+	// "requirements" installs from a requirements.txt supplied via ConfigData.
 	// "git" clones a repository and builds from pyproject.toml.
-	// +kubebuilder:validation:Enum=requirements;git
+	// "app" clones a repository with metadata.yaml + requirements.txt + main.py.
+	// +kubebuilder:validation:Enum=requirements;git;app
 	// +optional
 	BuildType string `json:"buildType,omitempty"`
 
 	// GitSource specifies the repository to clone. Required when BuildType is "git".
 	// +optional
 	GitSource *GitSourceSpec `json:"gitSource,omitempty"`
+
+	// AppSource specifies the repository and app metadata. Required when BuildType is "app".
+	// +optional
+	AppSource *AppSourceSpec `json:"appSource,omitempty"`
 
 	// ConfigData holds filename→content pairs mounted as a ConfigMap volume at /workspace.
 	// For requirements builds this contains "requirements.txt"; empty for git builds.

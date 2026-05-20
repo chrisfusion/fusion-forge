@@ -1,0 +1,12 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .Release.Name }}-builder-images
+  namespace: {{ .Values.namespace }}
+  labels:
+    {{- include "fusion-forge.labels" . | nindent 4 }}
+    app.kubernetes.io/component: server
+data:
+  {{- range $key, $value := .Values.builderImages }}
+  {{ $key | quote }}: {{ $value | quote }}
+  {{- end }}

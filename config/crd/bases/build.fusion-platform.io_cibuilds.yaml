@@ -82,7 +82,11 @@ spec:
                   For venv builds this contains "requirements.txt".
                 type: object
               buildType:
-                description: BuildType identifies the build strategy ("requirements" or "git").
+                description: BuildType identifies the build strategy ("requirements", "git", or "app").
+                enum:
+                - requirements
+                - git
+                - app
                 type: string
               description:
                 description: Description is a human-readable description of the artifact.
@@ -208,6 +212,24 @@ spec:
                   - name
                   type: object
                 type: array
+              appSource:
+                description: AppSource specifies the repository and app metadata for app-type builds.
+                properties:
+                  baseDependencies:
+                    description: BaseDependencies is the optional URL of a base venvpack to layer project requirements on top of.
+                    type: string
+                  projectDir:
+                    description: ProjectDir is an optional relative path to the app project within the repository (monorepo support).
+                    type: string
+                  ref:
+                    description: Ref is the branch or tag to check out.
+                    type: string
+                  url:
+                    description: URL is the HTTPS URL of the git repository.
+                    type: string
+                required:
+                - url
+                type: object
               gitSource:
                 description: GitSource specifies the git repository to clone for git-type builds.
                 properties:

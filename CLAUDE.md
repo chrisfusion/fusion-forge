@@ -117,7 +117,7 @@ flux/                      # Flux GitOps — sources/, environments/dev|staging|
 | `DB_SSLMODE` | `disable` | `disable` / `require` — golang-migrate needs lib/pq; append `?sslmode=disable` in DBURL |
 | `K8S_NAMESPACE` | `fusion` | Namespace for CIBuild CRs and build Jobs |
 | `INDEX_BACKEND_URL` | `http://fusion-index-backend.fusion.svc.cluster.local:8080` | fusion-index base URL |
-| `BUILDER_IMAGE` | `ghcr.io/fusion-platform/venv-builder:latest` | Builder pod image |
+| `BUILDER_IMAGES_CM` | `fusion-forge-builder-images` | Name of ConfigMap mapping builder-image keys to image refs; loaded at server startup; add new images to `deployment/values.yaml` `builderImages` map |
 | `AUTH_ENABLED` | `false` | `true` to enable K8s SA TokenReview auth |
 | `AUTH_AUDIENCE` | _(empty)_ | If set, token audience is validated |
 | `AUTH_ALLOWED_SA` | _(empty)_ | Comma-separated `namespace/name` allowlist |
@@ -221,7 +221,7 @@ status:
 - **git build endpoints use JSON, not multipart**: `POST /api/v1/gitbuilds` and `POST /api/v1/gitbuilds/validate` take a JSON body — only `/venvs` endpoints use multipart form
 - **Validate endpoints must be read-only**: use `FindArtifact` (GET-only) not `FindOrCreateArtifact` in validate handlers — validate must never create artifacts as a side effect
 - **`pip wheel` must not use `--no-deps`**: required so pip can fetch build-system deps (`hatchling`, `flit`, etc.) declared in `pyproject.toml [build-system]`
-- **CIBuild CR name prefixes**: `forge-venv-{id}` for requirements builds, `forge-git-{id}` for git builds — must stay distinct to avoid K8s name collisions
+- **CIBuild CR name prefixes**: `forge-venv-{id}` for requirements builds, `forge-git-{id}` for git builds, `forge-app-{id}` for app builds — must stay distinct to avoid K8s name collisions
 - **`UpdateCIBuildName` is a hard failure path**: if the DB update to store the CR name fails, mark the build FAILED immediately and return 500 — do not proceed to create the CIBuild CR, as lazy sync will be permanently broken
 - **jobbuilder ConfigData guard**: volumes/mounts are only created when `len(Spec.ConfigData) > 0` — git builds pass empty ConfigData, so this guard prevents mounting a ConfigMap with no keys
 - **`metadata_source` three modes**: `"manual"` (default, name+version from request), `"version"` (name from request, version from pyproject.toml), `"full"` (both from pyproject.toml) — server fetches pyproject.toml via go-git in-memory clone before creating the DB row, so the DB record is always consistent
@@ -231,6 +231,10 @@ status:
 - **`project_dir` monorepo support**: optional relative path within a repo; validated to reject absolute paths and `..` escapes; shifts the project root for pyproject.toml lookup (server-side), structure validation, wheel build, and entrypoint resolution (builder-side)
 - **Builder Dockerfile runs as UID 1000**: `builder/Dockerfile` and `Dockerfile.py310` create a `builder` user (UID 1000) and `chown 1000:1000 /workspace` — required because the pod security context defaults to `runAsUser: 1000`; if you change the UID in `builderPodSecurityContext.runAsUser`, update both Dockerfiles to match
 - **`UploadFile` in indexclient requires exact `size`**: signature is `UploadFile(ctx, artifactID, semver, filename, data io.Reader, size int64)` — `size` must be the exact readable byte count of `data`; it is used to set `Content-Length` so the body streams without buffering; a mismatch silently corrupts the request body at the receiver
+- **`make docker-build` only rebuilds server + operator**: when `builder/main.go` changes, always run `make docker-build-builder BUILDER_IMG=fusion-venv-builder:local` separately — `make docker-build` never touches the builder image
+- **`:local` tag pods don't restart on image rebuild**: after `make docker-build` or `make docker-build-builder`, manually restart affected deployments — `kubectl rollout restart deployment/fusion-forge-server deployment/fusion-forge-operator`; the `checksum/builder-images` annotation handles ConfigMap-only changes but not image changes
+- **App build specifics**: CIBuild CR prefix `forge-app-{id}`; artifact prefix `app.{name}` in fusion-index; builder uploads 3 files per build (venvpack `.tar.gz` + `main.py` + `metadata.yaml`); metadata.yaml `name`/`version`/`builderImage` are required (missing = 422), `runner`/`basedependencies` are optional
+- **Builder images ConfigMap keys**: both `"3.12"` and `"python3.12"` (and `"3.10"`/`"python3.10"`) exist as aliases — metadata.yaml `builderImage` must match an exact key; validate endpoint returns 422 with a descriptive violation if the key is missing
 - **Linkerd: `builderInject` is for Job completion, not upload fix**: `linkerd.builderInject: "disabled"` prevents Job-completion hangs (Linkerd sidecar outlives the builder binary and blocks the Job from reaching `Completed`); it does NOT fix large upload failures; for uploads >~2 MB through Linkerd, set `linkerd.opaquePorts: "8080"` in the fusion-index Helm chart — that switches to raw mTLS TCP (keeps full Linkerd observability)
 
 ## Logging

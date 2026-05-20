@@ -33,6 +33,8 @@ type VenvBuild struct {
 	MetadataSource       string
 	ProjectDir           *string
 	PythonVersion        string
+	Runner               *string
+	BaseDependenciesURL  *string
 	CreatedAt            time.Time
 	UpdatedAt            time.Time
 }
@@ -65,6 +67,22 @@ type CreateGitBuildParams struct {
 	PythonVersion        string
 }
 
+// CreateAppBuildParams holds the fields for creating a new app-type VenvBuild row.
+type CreateAppBuildParams struct {
+	Name                 string
+	Version              string
+	Description          *string
+	CreatorID            *string
+	RepoURL              string
+	RepoRef              string
+	ProjectDir           *string
+	IndexArtifactID      *int64
+	IndexArtifactVersion *string
+	PythonVersion        string
+	Runner               *string
+	BaseDependenciesURL  *string
+}
+
 // ListParams holds pagination and filter options for listing VenvBuilds.
 type ListParams struct {
 	Page      int
@@ -90,6 +108,7 @@ func New(pool *pgxpool.Pool) *Queries {
 const scanCols = ` id, name, version, description, status, creator_id, creator_email,
 	index_artifact_id, index_artifact_version, ci_build_name,
 	build_type, repo_url, repo_ref, entrypoint_file, metadata_source, project_dir, python_version,
+	runner, base_dependencies_url,
 	created_at, updated_at `
 
 func scan(row pgx.Row) (VenvBuild, error) {
@@ -100,6 +119,7 @@ func scan(row pgx.Row) (VenvBuild, error) {
 		&b.IndexArtifactID, &b.IndexArtifactVersion,
 		&b.CIBuildName,
 		&b.BuildType, &b.RepoURL, &b.RepoRef, &b.EntrypointFile, &b.MetadataSource, &b.ProjectDir, &b.PythonVersion,
+		&b.Runner, &b.BaseDependenciesURL,
 		&b.CreatedAt, &b.UpdatedAt,
 	)
 	return b, err
@@ -136,6 +156,27 @@ func (q *Queries) CreateGitBuild(ctx context.Context, p CreateGitBuildParams) (i
 		p.Name, p.Version, p.Description, p.CreatorID,
 		p.IndexArtifactID, p.IndexArtifactVersion,
 		p.RepoURL, p.RepoRef, p.EntrypointFile, p.MetadataSource, p.ProjectDir, p.PythonVersion,
+	).Scan(&id)
+	return id, err
+}
+
+// CreateAppBuild inserts a new PENDING app build row and returns the generated ID.
+func (q *Queries) CreateAppBuild(ctx context.Context, p CreateAppBuildParams) (int64, error) {
+	const query = `
+		INSERT INTO venv_build
+			(name, version, description, status, creator_id,
+			 index_artifact_id, index_artifact_version,
+			 build_type, repo_url, repo_ref, project_dir, python_version,
+			 runner, base_dependencies_url,
+			 created_at, updated_at)
+		VALUES ($1,$2,$3,'PENDING',$4,$5,$6,'app',$7,$8,$9,$10,$11,$12,NOW(),NOW())
+		RETURNING id`
+	var id int64
+	err := q.pool.QueryRow(ctx, query,
+		p.Name, p.Version, p.Description, p.CreatorID,
+		p.IndexArtifactID, p.IndexArtifactVersion,
+		p.RepoURL, p.RepoRef, p.ProjectDir, p.PythonVersion,
+		p.Runner, p.BaseDependenciesURL,
 	).Scan(&id)
 	return id, err
 }

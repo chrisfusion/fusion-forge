@@ -23,6 +23,21 @@ type CreateVenvRequest struct {
 	PythonVersion string `form:"python_version" binding:"max=10"`
 }
 
+// CreateAppBuildRequest is the JSON body for POST /api/v1/appbuilds.
+// Name, version, builderImage, baseDependencies, and runner are always read from the
+// repository's metadata.yaml file; the caller only supplies the repository coordinates.
+type CreateAppBuildRequest struct {
+	// RepoURL is the HTTPS URL of the git repository containing metadata.yaml, requirements.txt, and main.py.
+	RepoURL string `json:"repo_url" form:"repo_url" binding:"required,max=2048,url"`
+
+	// RepoRef is the branch or tag to check out. Defaults to "main" when empty.
+	RepoRef string `json:"repo_ref" form:"repo_ref" binding:"max=255"`
+
+	// ProjectDir is an optional relative path to the app project within the repository.
+	// Must be relative and must not contain ".." components. Max 500 chars.
+	ProjectDir string `json:"project_dir" form:"project_dir" binding:"max=500"`
+}
+
 // CreateGitBuildRequest is the JSON body for POST /api/v1/gitbuilds.
 //
 // MetadataSource controls where name and version come from:

@@ -24,11 +24,14 @@ type Config struct {
 	// IndexBackendURL is the base URL of the fusion-index artifact registry.
 	IndexBackendURL string
 
-	// BuilderImage is the container image used for Python 3.12 builds (default).
-	BuilderImage string
+	// BuilderImages maps builder-image keys to container image references.
+	// Populated at startup by reading the K8s ConfigMap named BuilderImagesCM.
+	// Keys for requirements/git builds are the python_version strings ("3.12", "3.10").
+	// Keys for app builds are the builderImage field from metadata.yaml.
+	BuilderImages map[string]string
 
-	// BuilderImagePy310 is the container image used for Python 3.10 builds.
-	BuilderImagePy310 string
+	// BuilderImagesCM is the name of the K8s ConfigMap that holds the builder image map.
+	BuilderImagesCM string
 
 	// JobTTLSeconds is how long K8s keeps finished Jobs before GC.
 	JobTTLSeconds int32
@@ -74,8 +77,7 @@ func Load() *Config {
 		DBSSLMode:       getEnv("DB_SSLMODE", "disable"),
 		K8sNamespace:    getEnv("K8S_NAMESPACE", "fusion"),
 		IndexBackendURL: getEnv("INDEX_BACKEND_URL", "http://index-backend.fusion.svc.cluster.local:8080"),
-		BuilderImage:      getEnv("BUILDER_IMAGE", "ghcr.io/fusion-platform/venv-builder:latest"),
-		BuilderImagePy310: getEnv("BUILDER_IMAGE_PY310", "ghcr.io/fusion-platform/venv-builder-py310:latest"),
+		BuilderImagesCM: getEnv("BUILDER_IMAGES_CM", "fusion-forge-builder-images"),
 		JobTTLSeconds:   86400,
 		AuthEnabled:     getEnv("AUTH_ENABLED", "false") == "true",
 		AuthAudience:    getEnv("AUTH_AUDIENCE", ""),
@@ -94,13 +96,13 @@ func Load() *Config {
 	}
 }
 
-// BuilderImageForVersion returns the builder image for the requested Python version.
-// Falls back to the default (3.12) image for unknown versions.
-func (c *Config) BuilderImageForVersion(version string) string {
-	if version == "3.10" {
-		return c.BuilderImagePy310
+// BuilderImageFor returns the builder image URL for the given key.
+// Returns an error if the key is not present in the loaded BuilderImages map.
+func (c *Config) BuilderImageFor(key string) (string, error) {
+	if img, ok := c.BuilderImages[key]; ok && img != "" {
+		return img, nil
 	}
-	return c.BuilderImage
+	return "", fmt.Errorf("builder image key %q not found in builder-images ConfigMap", key)
 }
 
 // DBURL returns the PostgreSQL connection URL.

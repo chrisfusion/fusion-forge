@@ -106,6 +106,12 @@ func (h *GitBuildHandler) Create(c *gin.Context) {
 		return
 	}
 
+	builderImage, err := h.Cfg.BuilderImageFor(pythonVersion)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
 	ctx := c.Request.Context()
 
 	// Resolve name/version from pyproject.toml when requested.
@@ -190,7 +196,7 @@ func (h *GitBuildHandler) Create(c *gin.Context) {
 			Namespace: h.Cfg.K8sNamespace,
 		},
 		Spec: buildv1alpha1.CIBuildSpec{
-			BuilderImage:    h.Cfg.BuilderImageForVersion(pythonVersion),
+			BuilderImage:    builderImage,
 			IndexBackendURL: h.Cfg.IndexBackendURL,
 			BuildType:       "git",
 			ArtifactName:    req.Name,
