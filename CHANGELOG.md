@@ -7,6 +7,9 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+### Fixed
+- **`metadata.yaml` nested `runner` field**: `internal/gitutil/metadata.go` now parses `runner` as `interface{}` instead of `string`, accepting both a plain string and a structured object (e.g. `runner: {type: streamlit, port: 8501, args: {...}}`); `runnerType()` extracts the `type` key for the DB `runner` column; full raw YAML bytes continue to be uploaded as-is to fusion-index
+
 ### Added
 - **REST CRUD for GitWatcher CRs** (`GET/POST /api/v1/gitwatchers`, `GET/PUT/DELETE /api/v1/gitwatchers/:name`): create, list (paginated), get, full-spec update, and delete GitWatcher CRs directly via the REST API; `POST` validates repo reachability via `FetchRemoteHEAD` pre-flight; responses use nested `spec`/`status` shape; `tokenSecretRef` name/key included in responses
 - `internal/api/dto/gitwatcher_dto.go`: `CreateGitWatcherRequest`, `UpdateGitWatcherRequest`, `GitWatcherResponse`, `GitWatcherPageResponse`, `ToGitWatcherResponse`

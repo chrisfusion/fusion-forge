@@ -21,11 +21,11 @@ type AppMetadata struct {
 }
 
 type appMetadataYAML struct {
-	Name             string `yaml:"name"`
-	Version          string `yaml:"version"`
-	BuilderImage     string `yaml:"builderImage"`
-	BaseDependencies string `yaml:"basedependencies"`
-	Runner           string `yaml:"runner"`
+	Name             string      `yaml:"name"`
+	Version          string      `yaml:"version"`
+	BuilderImage     string      `yaml:"builderImage"`
+	BaseDependencies string      `yaml:"basedependencies"`
+	Runner           interface{} `yaml:"runner"`
 }
 
 // FetchAppMetadata does a depth-1 in-memory clone of repoURL at the given ref
@@ -89,7 +89,21 @@ func parseAppMetadata(content string) (AppMetadata, error) {
 		Version:          m.Version,
 		BuilderImage:     m.BuilderImage,
 		BaseDependencies: m.BaseDependencies,
-		Runner:           m.Runner,
+		Runner:           runnerType(m.Runner),
 		Raw:              []byte(content),
 	}, nil
+}
+
+// runnerType extracts a flat string from the runner field.
+// Supports both plain strings ("streamlit") and nested objects (runner.type).
+func runnerType(v interface{}) string {
+	switch r := v.(type) {
+	case string:
+		return r
+	case map[string]interface{}:
+		if t, ok := r["type"].(string); ok {
+			return t
+		}
+	}
+	return ""
 }
