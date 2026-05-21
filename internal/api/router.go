@@ -73,6 +73,11 @@ func NewRouter(
 		Cfg:         cfg,
 	}
 
+	gwh := &handlers.GitWatcherHandler{
+		K8sCRClient: k8sCRClient,
+		Cfg:         cfg,
+	}
+
 	v1 := r.Group("/api/v1")
 	v1.Use(middleware.NewAuthMiddleware(cfg))
 
@@ -93,6 +98,12 @@ func NewRouter(
 	v1.POST("/appbuilds/validate", ah.Validate)
 	v1.GET("/appbuilds/:id", ah.Get)
 	v1.GET("/appbuilds/:id/logs", ah.GetLogs)
+
+	v1.GET("/gitwatchers", gwh.List)
+	v1.POST("/gitwatchers", gwh.Create)
+	v1.GET("/gitwatchers/:name", gwh.Get)
+	v1.PUT("/gitwatchers/:name", gwh.Update)
+	v1.DELETE("/gitwatchers/:name", gwh.Delete)
 
 	return r
 }

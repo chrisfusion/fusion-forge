@@ -25,8 +25,8 @@ make generate
 # Then copy updated CRDs to cluster:
 kubectl apply -f config/crd/bases/
 
-# Build Docker image (inside minikube)
-make docker-build
+# Build Docker image (inside minikube) — must match :local tag the pods expect
+make docker-build IMG=fusion-forge:local
 
 # Build builder image (inside minikube)
 make docker-build-builder
@@ -81,11 +81,13 @@ internal/
     dto/
       requests.go          # CreateVenvRequest (multipart), CreateGitBuildRequest, CreateAppBuildRequest
       responses.go         # VenvBuildResponse, PageResponse, ValidationResponse
+      gitwatcher_dto.go    # GitWatcher CRUD DTOs: CreateGitWatcherRequest, UpdateGitWatcherRequest, GitWatcherResponse (nested spec/status)
     handlers/
       helpers.go           # pathID, internalError, syncStatusFromCR, podLogs, strPtr, boolStr, …
       venvs.go             # requirements build: List, Create, Validate, Get, GetLogs
       gitbuilds.go         # git build: List, Create, Validate, Get, GetLogs
       appbuilds.go         # app build: List, Create, Validate, Get, GetLogs
+      gitwatchers.go       # GitWatcher CRUD: List, Create, Get, Update, Delete — K8s CR only, no DB
     router.go              # gin routes + CORS
   jobbuilder/jobbuilder.go # builds K8s Job + ConfigMap from CIBuild spec
   controller/
@@ -317,6 +319,9 @@ Short name: `gw` — `kubectl get gw -n fusion`
 - **Token auth for private repos**: `spec.tokenSecretRef` references a K8s Secret in the same namespace; the watcher reads it via `r.Get` using its CR client — the watcher ServiceAccount must have `secrets: get` permission (already in the Helm RBAC Role)
 - **`buildtrigger` package is the shared trigger path**: both the REST handlers and the watcher call `TriggerGitBuild` / `TriggerAppBuild` — do not duplicate this logic; `ErrConflict` is the sentinel for 409-class conditions in both callers
 - **Watcher does not run DB migrations**: only `cmd/server/main.go` runs `golang-migrate` at startup; the watcher connects to the DB but never migrates it
+- **JSON handlers use `c.ShouldBind`, not `c.ShouldBindJSON`**: all handlers in this codebase call `c.ShouldBind(&req)` for JSON endpoints — `ShouldBind` respects Content-Type; `ShouldBindJSON` always parses as JSON regardless and breaks the convention
+- **GitWatcher REST response shape is nested spec/status**: unlike `VenvBuildResponse` (flat), `GitWatcherResponse` has `spec: {}` and `status: {}` sub-objects — chosen to avoid collision between `ObjectMeta.Name` (K8s resource name) and `GitWatcherSpec.Name` (artifact name)
+- **GitWatcher Create/Update does a live `FetchRemoteHEAD` pre-flight**: `POST /api/v1/gitwatchers` always verifies repo reachability; `PUT` only re-checks when `repo_url` or `repo_ref` changes; requires `secrets:get` on the server RBAC to resolve `tokenSecretRef` for private repos (already in Helm role)
 - **Linkerd: `builderInject` is for Job completion, not upload fix**: `linkerd.builderInject: "disabled"` prevents Job-completion hangs (Linkerd sidecar outlives the builder binary and blocks the Job from reaching `Completed`); it does NOT fix large upload failures; for uploads >~2 MB through Linkerd, set `linkerd.opaquePorts: "8080"` in the fusion-index Helm chart — that switches to raw mTLS TCP (keeps full Linkerd observability)
 
 ## Logging
@@ -339,7 +344,7 @@ Short name: `gw` — `kubectl get gw -n fusion`
 
 ## minikube image tags
 
-- `k8s/deployment.yaml` uses `:local` tags — always build with `make docker-build` (tags `:local`) or pass `IMG=fusion-forge:local`; building with a semver tag (`:0.2.1`) won't be picked up by the pods
+- `k8s/deployment.yaml` uses `:local` tags — Makefile default is `:latest` so **always** pass `IMG=fusion-forge:local`; building without the flag produces a `:latest` image the pods will not pick up; semver tags (`:0.2.1`) are likewise ignored
 
 ## Changelog
 

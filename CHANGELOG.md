@@ -8,6 +8,12 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ## [Unreleased]
 
 ### Added
+- **REST CRUD for GitWatcher CRs** (`GET/POST /api/v1/gitwatchers`, `GET/PUT/DELETE /api/v1/gitwatchers/:name`): create, list (paginated), get, full-spec update, and delete GitWatcher CRs directly via the REST API; `POST` validates repo reachability via `FetchRemoteHEAD` pre-flight; responses use nested `spec`/`status` shape; `tokenSecretRef` name/key included in responses
+- `internal/api/dto/gitwatcher_dto.go`: `CreateGitWatcherRequest`, `UpdateGitWatcherRequest`, `GitWatcherResponse`, `GitWatcherPageResponse`, `ToGitWatcherResponse`
+- `internal/api/handlers/gitwatchers.go`: `GitWatcherHandler` with `List`, `Create`, `Get`, `Update`, `Delete`; validates `build_type`, `metadata_source`, and `python_version` enums; reads K8s Secret for token pre-flight
+- `deployment/templates/rbac.yaml`: server role extended with `gitwatchers` (create/get/list/watch/update/patch/delete), `gitwatchers/status` (get), and `secrets` (get) permissions
+
+
 - **GitOps watcher** (`cmd/watcher`): new binary that periodically polls registered `GitWatcher` CRs; triggers git or app builds whenever a new artifact version is detected; supports token-authenticated private repos, configurable poll interval with per-repo jitter to avoid thundering-herd, retry-with-cleanup on build failure (globally configurable max failures, default 2), and auto-disables the watcher on threshold breach
 - `api/v1alpha1/gitwatcher_types.go`: `GitWatcher` CRD with `spec.buildType` (`git`|`app`), `spec.metadataSource`, `spec.tokenSecretRef` for K8s Secret-backed PAT, `spec.enabled` toggle, and full status tracking (`phase`, `lastSeenCommit`, `lastBuiltVersion`, `lastBuildName`, `consecutiveFailures`)
 - `config/crd/bases/build.fusion-platform.io_gitwatchers.yaml`: hand-crafted CRD YAML for the GitWatcher type

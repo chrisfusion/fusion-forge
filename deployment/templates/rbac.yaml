@@ -11,6 +11,12 @@ rules:
   - apiGroups: ["build.fusion-platform.io"]
     resources: ["cibuilds"]
     verbs: ["create", "get", "list", "watch"]
+  - apiGroups: ["build.fusion-platform.io"]
+    resources: ["gitwatchers"]
+    verbs: ["create", "get", "list", "watch", "update", "patch", "delete"]
+  - apiGroups: ["build.fusion-platform.io"]
+    resources: ["gitwatchers/status"]
+    verbs: ["get"]
   - apiGroups: [""]
     resources: ["configmaps"]
     verbs: ["get"]
@@ -19,6 +25,9 @@ rules:
     verbs: ["get", "list", "watch"]
   - apiGroups: [""]
     resources: ["pods/log"]
+    verbs: ["get"]
+  - apiGroups: [""]
+    resources: ["secrets"]
     verbs: ["get"]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
