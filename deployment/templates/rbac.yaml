@@ -83,6 +83,49 @@ roleRef:
   kind: Role
   name: fusion-forge-operator-role
   apiGroup: rbac.authorization.k8s.io
+---
+# Role for the GitOps watcher: CRUD on GitWatchers, read CIBuilds, read Secrets.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: fusion-forge-watcher-role
+  namespace: {{ .Values.namespace }}
+  labels:
+    {{- include "fusion-forge.labels" . | nindent 4 }}
+    app.kubernetes.io/component: watcher
+rules:
+  - apiGroups: ["build.fusion-platform.io"]
+    resources: ["gitwatchers"]
+    verbs: ["get", "list", "watch", "update", "patch"]
+  - apiGroups: ["build.fusion-platform.io"]
+    resources: ["gitwatchers/status"]
+    verbs: ["get", "update", "patch"]
+  - apiGroups: ["build.fusion-platform.io"]
+    resources: ["cibuilds"]
+    verbs: ["create", "get", "list", "watch"]
+  - apiGroups: [""]
+    resources: ["secrets"]
+    verbs: ["get"]
+  - apiGroups: [""]
+    resources: ["configmaps"]
+    verbs: ["get"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: fusion-forge-watcher-binding
+  namespace: {{ .Values.namespace }}
+  labels:
+    {{- include "fusion-forge.labels" . | nindent 4 }}
+    app.kubernetes.io/component: watcher
+subjects:
+  - kind: ServiceAccount
+    name: {{ include "fusion-forge.watcherSAName" . }}
+    namespace: {{ .Values.namespace }}
+roleRef:
+  kind: Role
+  name: fusion-forge-watcher-role
+  apiGroup: rbac.authorization.k8s.io
 {{- if .Values.auth.enabled }}
 ---
 # ClusterRole + binding — allows the server SA to call the TokenReview API.

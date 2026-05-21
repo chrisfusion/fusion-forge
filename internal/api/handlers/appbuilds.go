@@ -10,16 +10,14 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/jackc/pgx/v5"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	corev1 "k8s.io/api/core/v1"
-
 	buildv1alpha1 "fusion-platform.io/fusion-forge/api/v1alpha1"
 	"fusion-platform.io/fusion-forge/internal/api/dto"
 	"fusion-platform.io/fusion-forge/internal/api/middleware"
+	"fusion-platform.io/fusion-forge/internal/buildtrigger"
 	"fusion-platform.io/fusion-forge/internal/config"
 	"fusion-platform.io/fusion-forge/internal/db"
 	"fusion-platform.io/fusion-forge/internal/gitutil"
@@ -97,7 +95,7 @@ func (h *AppBuildHandler) Create(c *gin.Context) {
 	log := middleware.LoggerFromCtx(c)
 
 	// Resolve all metadata from the repository's metadata.yaml.
-	meta, err := gitutil.FetchAppMetadata(ctx, req.RepoURL, req.RepoRef, req.ProjectDir)
+	meta, err := gitutil.FetchAppMetadata(ctx, req.RepoURL, req.RepoRef, req.ProjectDir, "")
 	if err != nil {
 		c.JSON(http.StatusUnprocessableEntity, gin.H{"error": "failed to read metadata.yaml: " + err.Error()})
 		return
@@ -118,96 +116,26 @@ func (h *AppBuildHandler) Create(c *gin.Context) {
 		return
 	}
 
-	fullName := indexclient.AppArtifactFullName(meta.Name)
-	artifactID, err := h.IndexClient.FindOrCreateArtifact(ctx, fullName, "")
-	if err != nil {
-		log.Error("find/create artifact", "name", fullName, "error", err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to register artifact in registry: " + err.Error()})
-		return
-	}
-
-	exists, err := h.IndexClient.VersionExists(ctx, artifactID, meta.Version)
-	if err != nil {
-		internalError(c, err)
-		return
-	}
-	if exists {
-		c.JSON(http.StatusConflict, gin.H{"error": fmt.Sprintf("version %s already exists for %s in registry", meta.Version, meta.Name)})
-		return
-	}
-
-	if err := h.IndexClient.CreateVersion(ctx, artifactID, meta.Version, ""); err != nil {
-		log.Error("create version in registry", "name", meta.Name, "version", meta.Version, "error", err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to create version in registry: " + err.Error()})
-		return
-	}
-
-	artifactVersion := meta.Version
-	runner := strPtr(meta.Runner)
-	baseDepsURL := strPtr(meta.BaseDependencies)
-	projectDir := strPtr(req.ProjectDir)
-	creator := strPtr(callerUsername(c))
-
-	buildID, err := h.DB.CreateAppBuild(ctx, db.CreateAppBuildParams{
-		Name:                 meta.Name,
-		Version:              meta.Version,
-		CreatorID:            creator,
-		RepoURL:              req.RepoURL,
-		RepoRef:              req.RepoRef,
-		ProjectDir:           projectDir,
-		IndexArtifactID:      &artifactID,
-		IndexArtifactVersion: &artifactVersion,
-		PythonVersion:        meta.BuilderImage,
-		Runner:               runner,
-		BaseDependenciesURL:  baseDepsURL,
+	buildID, _, err := buildtrigger.TriggerAppBuild(ctx, buildtrigger.Deps{
+		DB:          h.DB,
+		K8sCRClient: h.K8sCRClient,
+		IndexClient: h.IndexClient,
+		Cfg:         h.Cfg,
+	}, buildtrigger.AppBuildInput{
+		RepoURL:      req.RepoURL,
+		RepoRef:      req.RepoRef,
+		ProjectDir:   req.ProjectDir,
+		CreatorID:    callerUsername(c),
+		BuilderImage: builderImage,
+		Meta:         meta,
 	})
 	if err != nil {
-		if isUniqueViolation(err) {
-			c.JSON(http.StatusConflict, gin.H{"error": fmt.Sprintf("app build '%s:%s' already exists", meta.Name, meta.Version)})
+		if errors.Is(err, buildtrigger.ErrConflict) {
+			c.JSON(http.StatusConflict, gin.H{"error": err.Error()})
 		} else {
-			internalError(c, err)
+			log.Error("trigger app build", "name", meta.Name, "version", meta.Version, "error", err)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		}
-		return
-	}
-
-	ciBuildName := fmt.Sprintf("forge-app-%d", buildID)
-	if err := h.DB.UpdateCIBuildName(ctx, buildID, ciBuildName); err != nil {
-		log.Error("update ci_build_name", "build_id", buildID, "error", err)
-		_ = h.DB.UpdateStatus(ctx, buildID, "FAILED")
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to record build name"})
-		return
-	}
-
-	ciBuild := buildv1alpha1.CIBuild{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      ciBuildName,
-			Namespace: h.Cfg.K8sNamespace,
-		},
-		Spec: buildv1alpha1.CIBuildSpec{
-			BuilderImage:    builderImage,
-			IndexBackendURL: h.Cfg.IndexBackendURL,
-			BuildType:       "app",
-			ArtifactName:    meta.Name,
-			ArtifactVersion: meta.Version,
-			AppSource: &buildv1alpha1.AppSourceSpec{
-				URL:              req.RepoURL,
-				Ref:              req.RepoRef,
-				ProjectDir:       req.ProjectDir,
-				BaseDependencies: meta.BaseDependencies,
-			},
-			ConfigData: map[string]string{},
-			Env: []corev1.EnvVar{
-				{Name: "ARTIFACT_ID", Value: fmt.Sprintf("%d", artifactID)},
-				{Name: "ARTIFACT_VERSION", Value: meta.Version},
-				{Name: "VENV_NAME", Value: meta.Name},
-				{Name: "BUILD_TYPE", Value: "app"},
-			},
-		},
-	}
-	if err := h.K8sCRClient.Create(ctx, &ciBuild); err != nil {
-		log.Error("create CIBuild CR", "name", ciBuildName, "error", err)
-		_ = h.DB.UpdateStatus(ctx, buildID, "FAILED")
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to submit build job: " + err.Error()})
 		return
 	}
 
@@ -238,7 +166,7 @@ func (h *AppBuildHandler) Validate(c *gin.Context) {
 	ctx := c.Request.Context()
 	var violations []validation.Violation
 
-	meta, err := gitutil.FetchAppMetadata(ctx, req.RepoURL, req.RepoRef, req.ProjectDir)
+	meta, err := gitutil.FetchAppMetadata(ctx, req.RepoURL, req.RepoRef, req.ProjectDir, "")
 	if err != nil {
 		violations = append(violations, validation.Violation{
 			Line:    0,

@@ -180,6 +180,27 @@ func (c *Client) UploadFile(ctx context.Context, artifactID int64, semver, filen
 	return nil
 }
 
+// DeleteVersion removes a version from fusion-index for the given artifact.
+// A 404 response is treated as success (already deleted).
+func (c *Client) DeleteVersion(ctx context.Context, artifactID int64, semver string) error {
+	reqURL := fmt.Sprintf("%s/api/v1/artifacts/%d/versions/%s",
+		c.baseURL, artifactID, url.PathEscape(semver))
+	req, err := http.NewRequestWithContext(ctx, http.MethodDelete, reqURL, nil)
+	if err != nil {
+		return fmt.Errorf("build delete request: %w", err)
+	}
+	resp, err := c.http.Do(req)
+	if err != nil {
+		return fmt.Errorf("delete version: %w", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode == http.StatusOK || resp.StatusCode == http.StatusNoContent || resp.StatusCode == http.StatusNotFound {
+		return nil
+	}
+	b, _ := io.ReadAll(resp.Body)
+	return fmt.Errorf("delete version returned %d: %s", resp.StatusCode, string(b))
+}
+
 // --- Helpers ------------------------------------------------------------------
 
 func (c *Client) getJSON(ctx context.Context, rawURL string, out interface{}) error {

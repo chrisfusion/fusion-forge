@@ -1,0 +1,98 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: fusion-forge-watcher
+  namespace: {{ .Values.namespace }}
+  labels:
+    {{- include "fusion-forge.labels" . | nindent 4 }}
+    app: fusion-forge-watcher
+    app.kubernetes.io/component: watcher
+    {{- with .Values.watcher.deploymentLabels }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+  {{- with .Values.watcher.deploymentAnnotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  replicas: {{ .Values.watcher.replicas }}
+  selector:
+    matchLabels:
+      app: fusion-forge-watcher
+  template:
+    metadata:
+      labels:
+        app: fusion-forge-watcher
+        {{- include "fusion-forge.labels" . | nindent 8 }}
+        app.kubernetes.io/component: watcher
+        {{- with .Values.watcher.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      annotations:
+        checksum/watcher-config: {{ include (print $.Template.BasePath "/watcher-configmap.yaml") . | sha256sum }}
+        {{- with .Values.watcher.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+    spec:
+      serviceAccountName: {{ include "fusion-forge.watcherSAName" . }}
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      securityContext:
+        {{- toYaml .Values.watcher.podSecurityContext | nindent 8 }}
+      {{- with .Values.watcher.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.watcher.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.watcher.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: watcher
+          image: "{{ .Values.watcher.image.repository }}:{{ .Values.watcher.image.tag }}"
+          imagePullPolicy: {{ .Values.watcher.image.pullPolicy }}
+          command: ["/watcher"]
+          args:
+            - "--namespace={{ .Values.namespace }}"
+            - "--health-probe-bind-address=:8084"
+            - "--metrics-bind-address=:8083"
+          securityContext:
+            {{- toYaml .Values.watcher.containerSecurityContext | nindent 12 }}
+          ports:
+            - name: health
+              containerPort: 8084
+              protocol: TCP
+            - name: metrics
+              containerPort: 8083
+              protocol: TCP
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: 8084
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            failureThreshold: 3
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: 8084
+            initialDelaySeconds: 10
+            periodSeconds: 30
+            failureThreshold: 3
+          envFrom:
+            - configMapRef:
+                name: {{ .Release.Name }}-watcher-config
+          env:
+            - name: DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "fusion-forge.dbSecretName" . }}
+                  key: password
+          resources:
+            {{- toYaml .Values.watcher.resources | nindent 12 }}

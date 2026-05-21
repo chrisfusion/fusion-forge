@@ -1,0 +1,177 @@
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.16.1
+  name: gitwatchers.build.fusion-platform.io
+spec:
+  group: build.fusion-platform.io
+  names:
+    kind: GitWatcher
+    listKind: GitWatcherList
+    plural: gitwatchers
+    shortNames:
+    - gw
+    singular: gitwatcher
+  scope: Namespaced
+  versions:
+  - additionalPrinterColumns:
+    - jsonPath: .spec.repoURL
+      name: Repo
+      type: string
+    - jsonPath: .spec.repoRef
+      name: Ref
+      type: string
+    - jsonPath: .spec.buildType
+      name: Type
+      type: string
+    - jsonPath: .status.phase
+      name: Phase
+      type: string
+    - jsonPath: .status.lastBuiltVersion
+      name: LastBuilt
+      type: string
+    - jsonPath: .metadata.creationTimestamp
+      name: Age
+      type: date
+    name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        description: GitWatcher polls a git repository branch and triggers a build
+          whenever a new artifact version is detected in pyproject.toml (git builds)
+          or metadata.yaml (app builds).
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated. In CamelCase.
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: GitWatcherSpec defines the desired state of a GitWatcher.
+            properties:
+              buildType:
+                description: BuildType selects the build pipeline. "git" builds a
+                  Python venv from pyproject.toml; "app" builds an application from
+                  metadata.yaml.
+                enum:
+                - git
+                - app
+                type: string
+              description:
+                description: Description is a human-readable description of the artifact.
+                type: string
+              enabled:
+                description: Enabled controls whether polling is active. Set to false
+                  to pause the watcher without deleting it. Defaults to true when omitted.
+                type: boolean
+              entrypointFile:
+                description: EntrypointFile is an optional Python file uploaded alongside
+                  the venv archive. Ignored for app builds.
+                type: string
+              metadataSource:
+                description: MetadataSource controls how name and version are resolved.
+                  "manual" — both from this spec; "version" — name from spec, version
+                  from pyproject.toml; "full" — both from pyproject.toml.
+                enum:
+                - manual
+                - version
+                - full
+                type: string
+              name:
+                description: Name is the artifact name. Required when MetadataSource
+                  is "manual" or "version".
+                type: string
+              projectDir:
+                description: ProjectDir is an optional relative path to the project
+                  within the repository. Used for monorepos.
+                type: string
+              pythonVersion:
+                description: PythonVersion selects the builder image key. Accepted
+                  "3.10", "3.12". Defaults to "3.12". Ignored for app builds.
+                type: string
+              repoRef:
+                description: RepoRef is the single branch to watch for new commits.
+                  Defaults to "main".
+                type: string
+              repoURL:
+                description: RepoURL is the HTTPS git clone URL of the repository
+                  to watch.
+                type: string
+              tokenSecretRef:
+                description: TokenSecretRef optionally references a K8s Secret holding
+                  a personal access token for private repository access.
+                properties:
+                  key:
+                    description: Key is the key within the Secret whose value is the
+                      token.
+                    type: string
+                  name:
+                    description: Name is the name of the Secret.
+                    type: string
+                required:
+                - key
+                - name
+                type: object
+              version:
+                description: Version is the artifact version. Only used when MetadataSource
+                  is "manual".
+                type: string
+            required:
+            - buildType
+            - repoURL
+            type: object
+          status:
+            description: GitWatcherStatus reflects the observed state of a GitWatcher.
+            properties:
+              consecutiveFailures:
+                description: ConsecutiveFailures counts consecutive build failures
+                  since the last success.
+                type: integer
+              lastBuildName:
+                description: LastBuildName is the CIBuild CR name of the currently
+                  in-flight build.
+                type: string
+              lastBuildVersion:
+                description: LastBuildVersion is the artifact version being built
+                  by the in-flight build.
+                type: string
+              lastBuiltVersion:
+                description: LastBuiltVersion is the artifact version of the most
+                  recently successful build.
+                type: string
+              lastCheckedAt:
+                description: LastCheckedAt is when the remote was last polled.
+                format: date-time
+                type: string
+              lastError:
+                description: LastError is the most recent error or failure message.
+                type: string
+              lastSeenCommit:
+                description: LastSeenCommit is the HEAD commit SHA the last time the
+                  remote was successfully polled.
+                type: string
+              message:
+                description: Message is a human-readable status summary.
+                type: string
+              phase:
+                description: Phase is the current lifecycle phase.
+                enum:
+                - Active
+                - Disabled
+                type: string
+            type: object
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}

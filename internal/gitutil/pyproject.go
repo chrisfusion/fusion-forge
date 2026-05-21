@@ -11,6 +11,7 @@ import (
 
 	gogit "github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/plumbing"
+	gogithttp "github.com/go-git/go-git/v5/plumbing/transport/http"
 	"github.com/go-git/go-git/v5/storage/memory"
 	"github.com/pelletier/go-toml/v2"
 )
@@ -33,8 +34,9 @@ type pyprojectTOML struct {
 // projectDir is empty), and returns the [project].name and [project].version values.
 //
 // ref is tried first as a tag (refs/tags/<ref>), then as a branch (refs/heads/<ref>).
-func FetchPyprojectMeta(ctx context.Context, repoURL, ref, projectDir string) (PyprojectMeta, error) {
-	r, err := cloneRef(ctx, repoURL, ref)
+// token is optional; when non-empty it is used as HTTP Basic Auth with username "oauth2".
+func FetchPyprojectMeta(ctx context.Context, repoURL, ref, projectDir, token string) (PyprojectMeta, error) {
+	r, err := cloneRef(ctx, repoURL, ref, token)
 	if err != nil {
 		return PyprojectMeta{}, fmt.Errorf("clone repository: %w", err)
 	}
@@ -72,12 +74,16 @@ func FetchPyprojectMeta(ctx context.Context, repoURL, ref, projectDir string) (P
 }
 
 // cloneRef tries to shallow-clone repoURL at ref, first as a tag then as a branch.
-func cloneRef(ctx context.Context, repoURL, ref string) (*gogit.Repository, error) {
+// token is optional; when non-empty it is used as HTTP Basic Auth with username "oauth2".
+func cloneRef(ctx context.Context, repoURL, ref, token string) (*gogit.Repository, error) {
 	opts := &gogit.CloneOptions{
 		URL:          repoURL,
 		Depth:        1,
 		SingleBranch: true,
 		NoCheckout:   true,
+	}
+	if token != "" {
+		opts.Auth = &gogithttp.BasicAuth{Username: "oauth2", Password: token}
 	}
 
 	for _, refName := range []plumbing.ReferenceName{

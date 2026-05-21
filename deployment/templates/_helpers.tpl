@@ -51,6 +51,13 @@ fusion-forge-builder
 {{- end }}
 
 {{/*
+ServiceAccount name for the GitOps watcher.
+*/}}
+{{- define "fusion-forge.watcherSAName" -}}
+fusion-forge-watcher
+{{- end }}
+
+{{/*
 PostgreSQL StatefulSet / Service name.
 */}}
 {{- define "fusion-forge.postgresqlName" -}}

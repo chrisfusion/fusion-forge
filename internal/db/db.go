@@ -304,3 +304,18 @@ func sanitizeSortBy(s string) string {
 	}
 	return "created_at"
 }
+
+// GetVenvBuildByCIBuildName retrieves a build by its ci_build_name.
+// Returns pgx.ErrNoRows if not found.
+func (q *Queries) GetVenvBuildByCIBuildName(ctx context.Context, ciBuildName string) (VenvBuild, error) {
+	row := q.pool.QueryRow(ctx,
+		`SELECT`+scanCols+`FROM venv_build WHERE ci_build_name=$1`,
+		ciBuildName)
+	return scan(row)
+}
+
+// DeleteVenvBuild permanently deletes a build row by ID.
+func (q *Queries) DeleteVenvBuild(ctx context.Context, id int64) error {
+	_, err := q.pool.Exec(ctx, `DELETE FROM venv_build WHERE id=$1`, id)
+	return err
+}

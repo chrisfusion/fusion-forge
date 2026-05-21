@@ -17,10 +17,11 @@ generate:
 	$(CONTROLLER_GEN) object:headerFile="" paths="./api/..."
 	$(CONTROLLER_GEN) crd paths="./api/..." output:crd:dir=config/crd/bases
 
-## Build both Go binaries.
+## Build all Go binaries.
 build:
 	CGO_ENABLED=0 go build -o bin/server   ./cmd/server/
 	CGO_ENABLED=0 go build -o bin/operator ./cmd/operator/
+	CGO_ENABLED=0 go build -o bin/watcher  ./cmd/watcher/
 
 ## Run tests.
 test:

@@ -170,6 +170,62 @@ operator:
         type: RuntimeDefault
 
 # -----------------------------------------------------------------------------
+# Watcher — GitOps poller (cmd/watcher)
+#
+# Polls configured GitWatcher CRs and triggers builds when a new version is
+# detected in pyproject.toml (git builds) or metadata.yaml (app builds).
+# -----------------------------------------------------------------------------
+watcher:
+  image:
+    repository: fusion-forge
+    tag: "local"
+    pullPolicy: IfNotPresent
+
+  replicas: 1
+
+  resources:
+    requests:
+      cpu: 100m
+      memory: 64Mi
+    limits:
+      cpu: 500m
+      memory: 256Mi
+
+  # Pod-level security context.
+  podSecurityContext:
+    runAsNonRoot: true
+    runAsUser: 65532
+    fsGroup: 65532
+
+  # Container-level security context.
+  containerSecurityContext:
+    allowPrivilegeEscalation: false
+    capabilities:
+      drop: ["ALL"]
+    readOnlyRootFilesystem: true
+
+  # Extra labels/annotations on the Deployment object (not pods).
+  deploymentLabels: {}
+  deploymentAnnotations: {}
+
+  # Extra labels/annotations on every pod.
+  podLabels: {}
+  podAnnotations: {}
+
+  # Node scheduling constraints.
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+
+  config:
+    # fusion-index base URL (must match server.config.indexBackendURL).
+    indexBackendURL: http://fusion-index-backend.fusion.svc.cluster.local:8080
+    # How often to poll each watched repository (seconds).
+    pollInterval: "60"
+    # Number of consecutive build failures before a watcher is auto-disabled.
+    maxFailures: "2"
+
+# -----------------------------------------------------------------------------
 # Linkerd service mesh integration
 #
 # builderInject: controls the linkerd.io/inject annotation on builder Job pods.

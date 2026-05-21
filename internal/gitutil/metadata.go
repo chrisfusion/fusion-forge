@@ -31,8 +31,9 @@ type appMetadataYAML struct {
 // FetchAppMetadata does a depth-1 in-memory clone of repoURL at the given ref
 // (branch or tag), reads metadata.yaml from projectDir (or the repo root when
 // projectDir is empty), and returns the parsed AppMetadata.
-func FetchAppMetadata(ctx context.Context, repoURL, ref, projectDir string) (AppMetadata, error) {
-	r, err := cloneRef(ctx, repoURL, ref)
+// token is optional; when non-empty it is used as HTTP Basic Auth with username "oauth2".
+func FetchAppMetadata(ctx context.Context, repoURL, ref, projectDir, token string) (AppMetadata, error) {
+	r, err := cloneRef(ctx, repoURL, ref, token)
 	if err != nil {
 		return AppMetadata{}, fmt.Errorf("clone repository: %w", err)
 	}

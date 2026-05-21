@@ -14,6 +14,7 @@ COPY migrations/ migrations/
 
 RUN CGO_ENABLED=0 GOOS=linux go build -a -o server  ./cmd/server/
 RUN CGO_ENABLED=0 GOOS=linux go build -a -o operator ./cmd/operator/
+RUN CGO_ENABLED=0 GOOS=linux go build -a -o watcher ./cmd/watcher/
 
 # Runtime stage: minimal distroless image.
 FROM gcr.io/distroless/static:nonroot
@@ -22,6 +23,7 @@ WORKDIR /
 
 COPY --from=builder /workspace/server   .
 COPY --from=builder /workspace/operator .
+COPY --from=builder /workspace/watcher  .
 # Embed migrations so the server binary can run them at startup.
 COPY --from=builder /workspace/migrations migrations/
 

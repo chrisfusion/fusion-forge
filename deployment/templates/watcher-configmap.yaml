@@ -1,0 +1,19 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .Release.Name }}-watcher-config
+  namespace: {{ .Values.namespace }}
+  labels:
+    {{- include "fusion-forge.labels" . | nindent 4 }}
+    app.kubernetes.io/component: watcher
+data:
+  DB_HOST: {{ include "fusion-forge.dbHost" . | quote }}
+  DB_PORT: {{ include "fusion-forge.dbPort" . | quote }}
+  DB_NAME: {{ include "fusion-forge.dbName" . | quote }}
+  DB_USERNAME: {{ include "fusion-forge.dbUsername" . | quote }}
+  DB_SSLMODE: "disable"
+  K8S_NAMESPACE: {{ .Values.namespace | quote }}
+  BUILDER_IMAGES_CM: {{ printf "%s-builder-images" .Release.Name | quote }}
+  INDEX_BACKEND_URL: {{ .Values.watcher.config.indexBackendURL | quote }}
+  WATCHER_POLL_INTERVAL: {{ .Values.watcher.config.pollInterval | quote }}
+  WATCHER_MAX_FAILURES: {{ .Values.watcher.config.maxFailures | quote }}

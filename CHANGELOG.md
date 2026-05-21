@@ -8,6 +8,23 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ## [Unreleased]
 
 ### Added
+- **GitOps watcher** (`cmd/watcher`): new binary that periodically polls registered `GitWatcher` CRs; triggers git or app builds whenever a new artifact version is detected; supports token-authenticated private repos, configurable poll interval with per-repo jitter to avoid thundering-herd, retry-with-cleanup on build failure (globally configurable max failures, default 2), and auto-disables the watcher on threshold breach
+- `api/v1alpha1/gitwatcher_types.go`: `GitWatcher` CRD with `spec.buildType` (`git`|`app`), `spec.metadataSource`, `spec.tokenSecretRef` for K8s Secret-backed PAT, `spec.enabled` toggle, and full status tracking (`phase`, `lastSeenCommit`, `lastBuiltVersion`, `lastBuildName`, `consecutiveFailures`)
+- `config/crd/bases/build.fusion-platform.io_gitwatchers.yaml`: hand-crafted CRD YAML for the GitWatcher type
+- `internal/controller/gitwatcher_controller.go`: controller-runtime reconciler that polls remote HEAD, resolves version, checks DB for existing builds, triggers via `buildtrigger`, and handles success/failure lifecycle
+- `internal/buildtrigger/trigger.go`: shared package extracted from the REST handlers; `TriggerGitBuild` and `TriggerAppBuild` encapsulate the full FindOrCreateArtifact → CreateVersion → DB insert → CIBuild CR creation flow; `ErrConflict` sentinel for 409-class conditions
+- `internal/gitutil/remote.go`: `FetchRemoteHEAD` — cheap HEAD SHA detection via go-git ls-refs (no clone)
+- Token authentication added to `gitutil.FetchPyprojectMeta` and `gitutil.FetchAppMetadata`; handlers pass `""` (no token), watcher passes the PAT resolved from the K8s Secret
+- `internal/db`: `GetVenvBuildByCIBuildName` and `DeleteVenvBuild` query functions for watcher failure cleanup
+- `internal/indexclient`: `DeleteVersion` — removes an orphaned version from fusion-index after a failed build (best-effort, 404 treated as success)
+- `internal/config`: `WatcherPollInterval` (`WATCHER_POLL_INTERVAL`, default 60 s) and `WatcherMaxFailures` (`WATCHER_MAX_FAILURES`, default 2)
+- Helm: `watcher` section in `values.yaml`; `watcher-configmap.yaml`, `watcher-deployment.yaml` templates; watcher `ServiceAccount`, `Role`, `RoleBinding` in existing templates; `fusion-forge.watcherSAName` helper
+
+### Changed
+- `internal/api/handlers/gitbuilds.go` Create: delegates trigger logic to `buildtrigger.TriggerGitBuild` (DRY)
+- `internal/api/handlers/appbuilds.go` Create: delegates trigger logic to `buildtrigger.TriggerAppBuild` (DRY)
+
+
 - **App build type** (`POST /api/v1/appbuilds`): new builder that clones a git repository containing `metadata.yaml` + `requirements.txt` + `main.py`, optionally layers requirements on top of a base venvpack (from `metadata.yaml`'s `basedependencies` URL), and uploads three files to fusion-index under an `app.{name}` artifact: the venvpack archive, `main.py`, and `metadata.yaml`
 - `internal/gitutil/metadata.go`: in-memory git clone + YAML parse of `metadata.yaml`; extracts `name`, `version`, `builderImage`, `basedependencies`, and `runner`
 - `api/v1alpha1`: `AppSourceSpec` struct and `"app"` added to `BuildType` enum; CRD YAML updated accordingly

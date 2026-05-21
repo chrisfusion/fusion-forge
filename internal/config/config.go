@@ -63,6 +63,10 @@ type Config struct {
 	// Logging
 	LogLevel  string // "debug" | "info" | "warn" | "error"
 	LogFormat string // "json" | "text"
+
+	// Watcher
+	WatcherPollInterval int64 // WATCHER_POLL_INTERVAL env var (seconds, default 60)
+	WatcherMaxFailures  int   // WATCHER_MAX_FAILURES env var (default 2)
 }
 
 // Load reads configuration from environment variables with sensible defaults.
@@ -93,6 +97,8 @@ func Load() *Config {
 		BuilderPodSeccompProfile: getEnv("BUILDER_POD_SECCOMP_PROFILE", "RuntimeDefault"),
 		LogLevel:                 getEnv("LOG_LEVEL", "info"),
 		LogFormat:                getEnv("LOG_FORMAT", "json"),
+		WatcherPollInterval:      parseInt64Env("WATCHER_POLL_INTERVAL", 60),
+		WatcherMaxFailures:       int(parseInt64Env("WATCHER_MAX_FAILURES", 2)),
 	}
 }
 
