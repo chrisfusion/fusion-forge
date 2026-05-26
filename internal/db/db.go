@@ -319,3 +319,32 @@ func (q *Queries) DeleteVenvBuild(ctx context.Context, id int64) error {
 	_, err := q.pool.Exec(ctx, `DELETE FROM venv_build WHERE id=$1`, id)
 	return err
 }
+
+const maxBulkDeleteRows = 1000
+
+// ListBuildsForDeletion returns up to maxBulkDeleteRows builds whose status is in
+// statuses and whose created_at is before olderThan. If buildType is non-empty,
+// only that build type is included. Results are ordered oldest-first.
+func (q *Queries) ListBuildsForDeletion(ctx context.Context, statuses []string, olderThan time.Time, buildType string) ([]VenvBuild, error) {
+	args := []interface{}{statuses, olderThan}
+	where := "status = ANY($1::text[]) AND created_at < $2"
+	if buildType != "" {
+		where += " AND build_type = $3"
+		args = append(args, buildType)
+	}
+	query := fmt.Sprintf(`SELECT`+scanCols+`FROM venv_build WHERE %s ORDER BY created_at ASC LIMIT %d`, where, maxBulkDeleteRows)
+	rows, err := q.pool.Query(ctx, query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var builds []VenvBuild
+	for rows.Next() {
+		b, err := scan(rows)
+		if err != nil {
+			return nil, err
+		}
+		builds = append(builds, b)
+	}
+	return builds, rows.Err()
+}

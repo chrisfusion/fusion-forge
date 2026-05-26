@@ -7,16 +7,18 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
-### Fixed
-- **`metadata.yaml` nested `runner` field**: `internal/gitutil/metadata.go` now parses `runner` as `interface{}` instead of `string`, accepting both a plain string and a structured object (e.g. `runner: {type: streamlit, port: 8501, args: {...}}`); `runnerType()` extracts the `type` key for the DB `runner` column; full raw YAML bytes continue to be uploaded as-is to fusion-index
+---
+
+## [0.8.0] — 2026-05-27
 
 ### Added
+- **Bulk build deletion** (`DELETE /api/v1/builds`): delete old or abandoned builds by status and age; JSON body with `statuses` (array of `"FAILED"` and/or `"SUCCESS"`), `older_than` (RFC3339 timestamp), and optional `build_type` filter (`"requirements"`, `"git"`, `"app"`); PENDING/BUILDING builds are rejected with 422; FAILED builds have their orphaned fusion-index version removed; CIBuild CRs are deleted best-effort for all matched builds; at most 1000 rows deleted per call; response includes `deleted` (IDs) and `failed` (ID + error) arrays
+- `internal/api/handlers/builds.go`: `BuildsHandler` with `BulkDelete` handler
+- `internal/db/db.go`: `ListBuildsForDeletion` — multi-status `ANY($1::text[])` + `created_at < $2` filter, 1000-row cap
 - **REST CRUD for GitWatcher CRs** (`GET/POST /api/v1/gitwatchers`, `GET/PUT/DELETE /api/v1/gitwatchers/:name`): create, list (paginated), get, full-spec update, and delete GitWatcher CRs directly via the REST API; `POST` validates repo reachability via `FetchRemoteHEAD` pre-flight; responses use nested `spec`/`status` shape; `tokenSecretRef` name/key included in responses
 - `internal/api/dto/gitwatcher_dto.go`: `CreateGitWatcherRequest`, `UpdateGitWatcherRequest`, `GitWatcherResponse`, `GitWatcherPageResponse`, `ToGitWatcherResponse`
 - `internal/api/handlers/gitwatchers.go`: `GitWatcherHandler` with `List`, `Create`, `Get`, `Update`, `Delete`; validates `build_type`, `metadata_source`, and `python_version` enums; reads K8s Secret for token pre-flight
 - `deployment/templates/rbac.yaml`: server role extended with `gitwatchers` (create/get/list/watch/update/patch/delete), `gitwatchers/status` (get), and `secrets` (get) permissions
-
-
 - **GitOps watcher** (`cmd/watcher`): new binary that periodically polls registered `GitWatcher` CRs; triggers git or app builds whenever a new artifact version is detected; supports token-authenticated private repos, configurable poll interval with per-repo jitter to avoid thundering-herd, retry-with-cleanup on build failure (globally configurable max failures, default 2), and auto-disables the watcher on threshold breach
 - `api/v1alpha1/gitwatcher_types.go`: `GitWatcher` CRD with `spec.buildType` (`git`|`app`), `spec.metadataSource`, `spec.tokenSecretRef` for K8s Secret-backed PAT, `spec.enabled` toggle, and full status tracking (`phase`, `lastSeenCommit`, `lastBuiltVersion`, `lastBuildName`, `consecutiveFailures`)
 - `config/crd/bases/build.fusion-platform.io_gitwatchers.yaml`: hand-crafted CRD YAML for the GitWatcher type
@@ -28,12 +30,6 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - `internal/indexclient`: `DeleteVersion` — removes an orphaned version from fusion-index after a failed build (best-effort, 404 treated as success)
 - `internal/config`: `WatcherPollInterval` (`WATCHER_POLL_INTERVAL`, default 60 s) and `WatcherMaxFailures` (`WATCHER_MAX_FAILURES`, default 2)
 - Helm: `watcher` section in `values.yaml`; `watcher-configmap.yaml`, `watcher-deployment.yaml` templates; watcher `ServiceAccount`, `Role`, `RoleBinding` in existing templates; `fusion-forge.watcherSAName` helper
-
-### Changed
-- `internal/api/handlers/gitbuilds.go` Create: delegates trigger logic to `buildtrigger.TriggerGitBuild` (DRY)
-- `internal/api/handlers/appbuilds.go` Create: delegates trigger logic to `buildtrigger.TriggerAppBuild` (DRY)
-
-
 - **App build type** (`POST /api/v1/appbuilds`): new builder that clones a git repository containing `metadata.yaml` + `requirements.txt` + `main.py`, optionally layers requirements on top of a base venvpack (from `metadata.yaml`'s `basedependencies` URL), and uploads three files to fusion-index under an `app.{name}` artifact: the venvpack archive, `main.py`, and `metadata.yaml`
 - `internal/gitutil/metadata.go`: in-memory git clone + YAML parse of `metadata.yaml`; extracts `name`, `version`, `builderImage`, `basedependencies`, and `runner`
 - `api/v1alpha1`: `AppSourceSpec` struct and `"app"` added to `BuildType` enum; CRD YAML updated accordingly
@@ -43,11 +39,17 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - `deployment/templates/rbac.yaml`: server Role gains `configmaps: get` to allow reading the builder-images ConfigMap at startup
 - DB migration `000006`: adds `runner` and `base_dependencies_url` columns to `venv_build`
 - `runner` and `baseDependenciesUrl` fields in `VenvBuildResponse`
-
 - Structured logging via `log/slog` throughout the server binary: JSON output by default, configurable via `LOG_FORMAT=json|text` and `LOG_LEVEL=debug|info|warn|error` env vars (both wired through Helm `server.config.logLevel` / `server.config.logFormat`)
 - `internal/api/middleware/logging.go`: Gin middleware that generates a per-request ID, stamps a child `*slog.Logger` with `{request_id, method, path, client_ip}`, stores it in `gin.Context`, and logs the access line (status + latency) after each handler returns
 - All 500-class errors now logged: `internalError()` logs via the per-request logger before writing the HTTP response; handler-level errors (artifact registry calls, CIBuild CR creation, status sync) log with structured fields including `build_id`, `name`, `version`
 - Startup sequence (DB connect/ping, migrations, rules loading, K8s client setup) logged as structured events at INFO level
+
+### Fixed
+- **`metadata.yaml` nested `runner` field**: `internal/gitutil/metadata.go` now parses `runner` as `interface{}` instead of `string`, accepting both a plain string and a structured object (e.g. `runner: {type: streamlit, port: 8501, args: {...}}`); `runnerType()` extracts the `type` key for the DB `runner` column; full raw YAML bytes continue to be uploaded as-is to fusion-index
+
+### Changed
+- `internal/api/handlers/gitbuilds.go` Create: delegates trigger logic to `buildtrigger.TriggerGitBuild` (DRY)
+- `internal/api/handlers/appbuilds.go` Create: delegates trigger logic to `buildtrigger.TriggerAppBuild` (DRY)
 
 ---
 

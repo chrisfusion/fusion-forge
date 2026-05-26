@@ -3,7 +3,10 @@
 
 package dto
 
-import "mime/multipart"
+import (
+	"mime/multipart"
+	"time"
+)
 
 // CreateVenvRequest is the multipart/form-data body for POST /api/v1/venvs.
 type CreateVenvRequest struct {
@@ -82,4 +85,20 @@ type CreateGitBuildRequest struct {
 
 	// PythonVersion selects the Python interpreter. Accepted: "3.10", "3.12" (default).
 	PythonVersion string `json:"python_version" form:"python_version" binding:"max=10"`
+}
+
+// BulkDeleteBuildsRequest is the JSON body for DELETE /api/v1/builds.
+// Both statuses and older_than are required to prevent accidental mass-deletion.
+// At most 1000 matching builds are deleted per call; repeat the call to delete more.
+type BulkDeleteBuildsRequest struct {
+	// Statuses is a non-empty list of terminal statuses to target.
+	// Only "FAILED" and "SUCCESS" are accepted; "PENDING" and "BUILDING" are rejected.
+	Statuses []string `json:"statuses" binding:"required,min=1"`
+
+	// OlderThan deletes only builds whose created_at is before this RFC3339 timestamp.
+	OlderThan time.Time `json:"older_than"`
+
+	// BuildType restricts deletion to a specific build type.
+	// Accepted values: "requirements", "git", "app". Empty means all types.
+	BuildType string `json:"build_type"`
 }

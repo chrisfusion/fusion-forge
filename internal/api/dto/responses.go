@@ -77,6 +77,18 @@ type ValidationResponse struct {
 	Violations []validation.Violation `json:"violations"`
 }
 
+// BulkDeleteFailure describes a single build that could not be deleted.
+type BulkDeleteFailure struct {
+	ID    int64  `json:"id"`
+	Error string `json:"error"`
+}
+
+// BulkDeleteResponse is the response for DELETE /api/v1/builds.
+type BulkDeleteResponse struct {
+	Deleted []int64             `json:"deleted"`
+	Failed  []BulkDeleteFailure `json:"failed"`
+}
+
 // FromValidationResult converts a validation.Result to a ValidationResponse.
 func FromValidationResult(r validation.Result) ValidationResponse {
 	vv := r.Violations

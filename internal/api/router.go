@@ -78,6 +78,13 @@ func NewRouter(
 		Cfg:         cfg,
 	}
 
+	bh := &handlers.BuildsHandler{
+		DB:          queries,
+		K8sCRClient: k8sCRClient,
+		IndexClient: indexClient,
+		Cfg:         cfg,
+	}
+
 	v1 := r.Group("/api/v1")
 	v1.Use(middleware.NewAuthMiddleware(cfg))
 
@@ -104,6 +111,8 @@ func NewRouter(
 	v1.GET("/gitwatchers/:name", gwh.Get)
 	v1.PUT("/gitwatchers/:name", gwh.Update)
 	v1.DELETE("/gitwatchers/:name", gwh.Delete)
+
+	v1.DELETE("/builds", bh.BulkDelete)
 
 	return r
 }
