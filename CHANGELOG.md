@@ -7,6 +7,9 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+### Fixed
+- **App builder copies project source packages into venv site-packages**: after `pip install -r requirements.txt`, all subdirectories from the project root (e.g. `internals/`) are copied into `venv/lib/pythonX.Y/site-packages/` so they are importable at runtime; venvpack remains a clean `venv/`-only tarball; no `pyproject.toml` required
+
 ---
 
 ## [0.8.0] — 2026-05-27

@@ -328,15 +328,34 @@ func buildFromApp(ctx context.Context, uploadURL, archiveName, archivePath strin
 		run(pip, "install", "--no-cache-dir", "--quiet", "--upgrade", "pip")
 	}
 
-	// Step 4: install project requirements into the venv.
+	// Step 4: install project dependencies from requirements.txt.
 	reqFile := filepath.Join(projectRoot, "requirements.txt")
 	log.Println("[forge-builder] installing packages from requirements.txt")
 	run(pip, "install", "--no-cache-dir", "-r", reqFile)
 
-	// Step 5: archive and upload the venv.
+	// Step 5: copy project source packages into site-packages so they are
+	// importable at runtime without a pyproject.toml.
+	// Every subdirectory in the project root (except known non-source dirs) is
+	// copied — e.g. internals/ becomes an importable package inside the venv.
+	sitePackages := findSitePackages()
+	log.Printf("[forge-builder] copying project source into %s", sitePackages)
+	entries, rdErr := os.ReadDir(projectRoot)
+	if rdErr != nil {
+		log.Fatalf("[forge-builder] read project dir: %v", rdErr)
+	}
+	skipDirs := map[string]bool{"venv": true, "dist": true, "build": true, "__pycache__": true}
+	for _, e := range entries {
+		if !e.IsDir() || skipDirs[e.Name()] || strings.HasPrefix(e.Name(), ".") {
+			continue
+		}
+		log.Printf("[forge-builder] copying %s → site-packages", e.Name())
+		run("cp", "-r", filepath.Join(projectRoot, e.Name()), filepath.Join(sitePackages, e.Name()))
+	}
+
+	// Step 6: archive and upload the venv (source is now inside site-packages).
 	archiveAndUpload(ctx, uploadURL, archiveName, archivePath)
 
-	// Step 6: upload main.py.
+	// Step 7: upload main.py.
 	mainPyPath := filepath.Join(projectRoot, "main.py")
 	fi, err := os.Stat(mainPyPath)
 	if err != nil {
@@ -347,7 +366,7 @@ func buildFromApp(ctx context.Context, uploadURL, archiveName, archivePath strin
 		log.Fatalf("[forge-builder] main.py upload failed: %v", err)
 	}
 
-	// Step 7: upload metadata.yaml.
+	// Step 8: upload metadata.yaml.
 	metaPath := filepath.Join(projectRoot, "metadata.yaml")
 	fi, err = os.Stat(metaPath)
 	if err != nil {
@@ -357,6 +376,15 @@ func buildFromApp(ctx context.Context, uploadURL, archiveName, archivePath strin
 	if err := uploadFile(ctx, uploadURL, "metadata.yaml", metaPath); err != nil {
 		log.Fatalf("[forge-builder] metadata.yaml upload failed: %v", err)
 	}
+}
+
+// findSitePackages returns the site-packages path inside the venv.
+func findSitePackages() string {
+	matches, err := filepath.Glob(filepath.Join(venvDir, "lib", "python*", "site-packages"))
+	if err != nil || len(matches) == 0 {
+		log.Fatalf("[forge-builder] cannot locate site-packages in %s", venvDir)
+	}
+	return matches[0]
 }
 
 // validateAppStructure checks that the repository contains the required app files.

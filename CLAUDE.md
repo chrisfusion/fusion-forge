@@ -41,6 +41,9 @@ helm install fusion-forge deployment/ -n fusion
 # Port-forward server (keep running in a separate terminal)
 kubectl port-forward -n fusion service/fusion-forge 18080:8080 --address 127.0.0.1
 
+# Port-forward fusion-index (for direct API debugging/verification)
+kubectl port-forward -n fusion service/fusion-index-backend 18081:8080 --address 127.0.0.1
+
 # Restart all three deployments after image rebuild
 kubectl rollout restart deployment/fusion-forge-server deployment/fusion-forge-operator deployment/fusion-forge-watcher -n fusion
 ```
@@ -343,6 +346,11 @@ Short name: `gw` — `kubectl get gw -n fusion`
 - **Watcher** (`cmd/watcher/main.go`): same as operator — uses `logr`/`zap` via controller-runtime; the reconciler uses `log.FromContext(ctx)` throughout; do not use slog inside the controller
 - **Helm**: `logLevel` / `logFormat` under `server.config` in `values.yaml` → `LOG_LEVEL` / `LOG_FORMAT` in `server-configmap.yaml` → injected via `envFrom` in the deployment template
 - **Canonical app build example**: `../fusion-testcases/simple_streamlit_template/` — contains the reference `metadata.yaml`, `requirements.txt`, and `main.py`; use this as ground truth when changing app-build parsing or validation
+- **Builder function naming mismatch** (TODO rename): `buildFromGit` in `builder/main.go` is the **pyproject.toml / pip-wheel path** (Python library packages); `buildFromApp` is the **metadata.yaml / pip-install-requirements path** (Streamlit apps). The names are inverted relative to what they do. Planned rename: `buildFromGit` → `buildFromToml`, `buildFromApp` → `buildFromMetadata`. Do NOT rename until the REST API layer and BFF clients are audited — `BUILD_TYPE` env var values `"git"` and `"app"` must stay unchanged.
+- **App build venvpack is a clean `venv/`-only tarball**: project source subdirectories (e.g. `internals/`) are copied into `venv/lib/pythonX.Y/site-packages/` after `pip install -r requirements.txt` so they are importable at runtime; no `pyproject.toml` required; `main.py` must import them as packages (e.g. `import internals`) not via filesystem paths
+- **App project subdirectories need `__init__.py`**: any subdirectory copied into site-packages by the app builder must have an `__init__.py`; without it the package is a namespace package, `pkg.__file__` is `None`, and path resolution in `main.py` crashes at runtime
+- **App `main.py` must use package imports, not filesystem paths**: use `import internals; path = os.path.join(os.path.dirname(internals.__file__), "app.py")` — not `os.path.dirname(__file__)` which resolves to wherever the runner placed `main.py`, not site-packages
+- **Retriggering a build for the same version requires manual fusion-index cleanup**: `DELETE /api/v1/builds` is best-effort on fusion-index; if it leaves the version behind the next trigger returns 409 conflict — delete manually: `curl -X DELETE http://localhost:18081/api/v1/artifacts/{id}/versions/{ver}`
 
 ## Migrations
 
