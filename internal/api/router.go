@@ -113,6 +113,7 @@ func NewRouter(
 	v1.DELETE("/gitwatchers/:name", gwh.Delete)
 
 	v1.DELETE("/builds", bh.BulkDelete)
+	v1.POST("/builds/zombie-cleanup", bh.ZombieCleanup)
 
 	return r
 }

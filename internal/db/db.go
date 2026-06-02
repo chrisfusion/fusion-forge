@@ -322,6 +322,33 @@ func (q *Queries) DeleteVenvBuild(ctx context.Context, id int64) error {
 
 const maxBulkDeleteRows = 1000
 
+// ListInflightBuilds returns up to maxBulkDeleteRows PENDING or BUILDING builds whose
+// ci_build_name is set and created_at is before olderThan. If buildType is non-empty,
+// only that build type is included. Results are ordered oldest-first.
+func (q *Queries) ListInflightBuilds(ctx context.Context, olderThan time.Time, buildType string) ([]VenvBuild, error) {
+	args := []interface{}{[]string{"PENDING", "BUILDING"}, olderThan}
+	where := "status = ANY($1::text[]) AND ci_build_name IS NOT NULL AND created_at < $2"
+	if buildType != "" {
+		where += " AND build_type = $3"
+		args = append(args, buildType)
+	}
+	query := fmt.Sprintf(`SELECT`+scanCols+`FROM venv_build WHERE %s ORDER BY created_at ASC LIMIT %d`, where, maxBulkDeleteRows)
+	rows, err := q.pool.Query(ctx, query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var builds []VenvBuild
+	for rows.Next() {
+		b, err := scan(rows)
+		if err != nil {
+			return nil, err
+		}
+		builds = append(builds, b)
+	}
+	return builds, rows.Err()
+}
+
 // ListBuildsForDeletion returns up to maxBulkDeleteRows builds whose status is in
 // statuses and whose created_at is before olderThan. If buildType is non-empty,
 // only that build type is included. Results are ordered oldest-first.

@@ -12,6 +12,8 @@ import (
 
 	"github.com/gin-gonic/gin"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	buildv1alpha1 "fusion-platform.io/fusion-forge/api/v1alpha1"
@@ -96,6 +98,79 @@ func (h *BuildsHandler) BulkDelete(c *gin.Context) {
 		"build_type", req.BuildType,
 	)
 	c.JSON(http.StatusOK, dto.BulkDeleteResponse{Deleted: deleted, Failed: failed})
+}
+
+// ZombieCleanup handles POST /api/v1/builds/zombie-cleanup.
+// It queries PENDING/BUILDING builds older than older_than whose CIBuild CR no longer
+// exists in Kubernetes, then deletes them: index version (best-effort) then DB row.
+// At most 1000 builds are inspected per call.
+func (h *BuildsHandler) ZombieCleanup(c *gin.Context) {
+	var req dto.ZombieCleanupRequest
+	if err := c.ShouldBind(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	if req.OlderThan.IsZero() {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "older_than is required"})
+		return
+	}
+	if req.BuildType != "" && !validBuildTypes[req.BuildType] {
+		c.JSON(http.StatusUnprocessableEntity, gin.H{"error": fmt.Sprintf("unknown build_type %q: accepted values are requirements, git, app", req.BuildType)})
+		return
+	}
+
+	ctx := c.Request.Context()
+	logger := middleware.LoggerFromCtx(c)
+
+	builds, err := h.DB.ListInflightBuilds(ctx, req.OlderThan, req.BuildType)
+	if err != nil {
+		internalError(c, err)
+		return
+	}
+
+	deleted := make([]int64, 0, len(builds))
+	failed := make([]dto.BulkDeleteFailure, 0, len(builds))
+
+	for _, b := range builds {
+		var ciBuild buildv1alpha1.CIBuild
+		err := h.K8sCRClient.Get(ctx, types.NamespacedName{
+			Name:      *b.CIBuildName,
+			Namespace: h.Cfg.K8sNamespace,
+		}, &ciBuild)
+		if err == nil {
+			continue // CR still exists, not a zombie
+		}
+		if !apierrors.IsNotFound(err) {
+			logger.Warn("zombie check: get CIBuild CR", "ci_build_name", *b.CIBuildName, "error", err)
+			failed = append(failed, dto.BulkDeleteFailure{ID: b.ID, Error: "k8s: " + err.Error()})
+			continue
+		}
+		if err := h.deleteZombie(ctx, logger, b); err != nil {
+			logger.Error("delete zombie build", "build_id", b.ID, "error", err)
+			failed = append(failed, dto.BulkDeleteFailure{ID: b.ID, Error: err.Error()})
+		} else {
+			deleted = append(deleted, b.ID)
+		}
+	}
+
+	logger.Info("zombie cleanup",
+		"inspected", len(builds),
+		"deleted", len(deleted),
+		"failed", len(failed),
+		"older_than", req.OlderThan,
+		"build_type", req.BuildType,
+	)
+	c.JSON(http.StatusOK, dto.BulkDeleteResponse{Deleted: deleted, Failed: failed})
+}
+
+// deleteZombie removes a zombie build: deletes the index version (best-effort) then the DB row.
+func (h *BuildsHandler) deleteZombie(ctx context.Context, logger *slog.Logger, b db.VenvBuild) error {
+	if b.IndexArtifactID != nil && b.IndexArtifactVersion != nil {
+		if err := h.IndexClient.DeleteVersion(ctx, *b.IndexArtifactID, *b.IndexArtifactVersion); err != nil {
+			logger.Warn("delete zombie version from index", "artifact_id", *b.IndexArtifactID, "version", *b.IndexArtifactVersion, "error", err)
+		}
+	}
+	return h.DB.DeleteVenvBuild(ctx, b.ID)
 }
 
 // deleteBuild performs the cleanup sequence for a single build row:

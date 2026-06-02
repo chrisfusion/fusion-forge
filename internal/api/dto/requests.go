@@ -87,6 +87,18 @@ type CreateGitBuildRequest struct {
 	PythonVersion string `json:"python_version" form:"python_version" binding:"max=10"`
 }
 
+// ZombieCleanupRequest is the JSON body for POST /api/v1/builds/zombie-cleanup.
+// older_than is required to avoid accidentally cleaning legitimately in-flight builds.
+// At most 1000 builds are inspected per call; repeat the call to sweep more.
+type ZombieCleanupRequest struct {
+	// OlderThan restricts cleanup to builds whose created_at is before this RFC3339 timestamp.
+	OlderThan time.Time `json:"older_than"`
+
+	// BuildType restricts cleanup to a specific build type.
+	// Accepted values: "requirements", "git", "app". Empty means all types.
+	BuildType string `json:"build_type"`
+}
+
 // BulkDeleteBuildsRequest is the JSON body for DELETE /api/v1/builds.
 // Both statuses and older_than are required to prevent accidental mass-deletion.
 // At most 1000 matching builds are deleted per call; repeat the call to delete more.

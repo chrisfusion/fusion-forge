@@ -7,6 +7,9 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+### Added
+- **Zombie build cleanup** (`POST /api/v1/builds/zombie-cleanup`): detects and removes PENDING/BUILDING build rows whose Kubernetes CIBuild CR no longer exists; JSON body with `older_than` (RFC3339 timestamp, required) and optional `build_type` filter; for each zombie, the fusion-index artifact version is deleted best-effort before the DB row is removed; at most 1000 builds inspected per call; response includes `deleted` (IDs) and `failed` (ID + error) arrays
+
 ### Fixed
 - **App builder copies project source packages into venv site-packages**: after `pip install -r requirements.txt`, all subdirectories from the project root (e.g. `internals/`) are copied into `venv/lib/pythonX.Y/site-packages/` so they are importable at runtime; venvpack remains a clean `venv/`-only tarball; no `pyproject.toml` required
 
