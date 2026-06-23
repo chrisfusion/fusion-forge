@@ -3,9 +3,6 @@
 # fusion-forge — Helm Values
 # =============================================================================
 
-# Kubernetes namespace — must match the fusion platform namespace
-namespace: fusion
-
 # -----------------------------------------------------------------------------
 # Builder images — maps builder-image keys to container image references.
 # Keys for requirements/git builds are python_version strings ("3.12", "3.10").

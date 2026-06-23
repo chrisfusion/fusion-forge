@@ -2,7 +2,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: fusion-forge-watcher
-  namespace: {{ .Values.namespace }}
+  namespace: {{ .Release.Namespace }}
   labels:
     {{- include "fusion-forge.labels" . | nindent 4 }}
     app: fusion-forge-watcher
@@ -59,7 +59,7 @@ spec:
           imagePullPolicy: {{ .Values.watcher.image.pullPolicy }}
           command: ["/watcher"]
           args:
-            - "--namespace={{ .Values.namespace }}"
+            - "--namespace={{ .Release.Namespace }}"
             - "--health-probe-bind-address=:8084"
             - "--metrics-bind-address=:8083"
           securityContext:

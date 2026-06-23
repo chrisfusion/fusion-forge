@@ -1,10 +1,10 @@
 fusion-forge has been deployed.
 
-  Server:   http://{{ include "fusion-forge.serverServiceName" . }}.{{ .Values.namespace }}.svc.cluster.local:8080
-  Operator: watching namespace {{ .Values.namespace }} for CIBuild CRs
+  Server:   http://{{ include "fusion-forge.serverServiceName" . }}.{{ .Release.Namespace }}.svc.cluster.local:8080
+  Operator: watching namespace {{ .Release.Namespace }} for CIBuild CRs
 
 Health checks:
-  kubectl port-forward -n {{ .Values.namespace }} service/{{ include "fusion-forge.serverServiceName" . }} 18080:8080
+  kubectl port-forward -n {{ .Release.Namespace }} service/{{ include "fusion-forge.serverServiceName" . }} 18080:8080
   curl http://localhost:18080/q/health/live
   curl http://localhost:18080/q/health/ready
 

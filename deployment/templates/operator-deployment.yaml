@@ -2,7 +2,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: fusion-forge-operator
-  namespace: {{ .Values.namespace }}
+  namespace: {{ .Release.Namespace }}
   labels:
     {{- include "fusion-forge.labels" . | nindent 4 }}
     app: fusion-forge-operator
@@ -58,7 +58,7 @@ spec:
           imagePullPolicy: {{ .Values.operator.image.pullPolicy }}
           command: ["/operator"]
           args:
-            - "--namespace={{ .Values.namespace }}"
+            - "--namespace={{ .Release.Namespace }}"
             - "--health-probe-bind-address=:8081"
             - "--metrics-bind-address=:8082"
           securityContext:

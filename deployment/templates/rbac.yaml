@@ -3,7 +3,7 @@ apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
 metadata:
   name: fusion-forge-server-role
-  namespace: {{ .Values.namespace }}
+  namespace: {{ .Release.Namespace }}
   labels:
     {{- include "fusion-forge.labels" . | nindent 4 }}
     app.kubernetes.io/component: server
@@ -34,14 +34,14 @@ apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
 metadata:
   name: fusion-forge-server-binding
-  namespace: {{ .Values.namespace }}
+  namespace: {{ .Release.Namespace }}
   labels:
     {{- include "fusion-forge.labels" . | nindent 4 }}
     app.kubernetes.io/component: server
 subjects:
   - kind: ServiceAccount
     name: {{ include "fusion-forge.serverSAName" . }}
-    namespace: {{ .Values.namespace }}
+    namespace: {{ .Release.Namespace }}
 roleRef:
   kind: Role
   name: fusion-forge-server-role
@@ -52,7 +52,7 @@ apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
 metadata:
   name: fusion-forge-operator-role
-  namespace: {{ .Values.namespace }}
+  namespace: {{ .Release.Namespace }}
   labels:
     {{- include "fusion-forge.labels" . | nindent 4 }}
     app.kubernetes.io/component: operator
@@ -80,14 +80,14 @@ apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
 metadata:
   name: fusion-forge-operator-binding
-  namespace: {{ .Values.namespace }}
+  namespace: {{ .Release.Namespace }}
   labels:
     {{- include "fusion-forge.labels" . | nindent 4 }}
     app.kubernetes.io/component: operator
 subjects:
   - kind: ServiceAccount
     name: {{ include "fusion-forge.operatorSAName" . }}
-    namespace: {{ .Values.namespace }}
+    namespace: {{ .Release.Namespace }}
 roleRef:
   kind: Role
   name: fusion-forge-operator-role
@@ -98,7 +98,7 @@ apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
 metadata:
   name: fusion-forge-watcher-role
-  namespace: {{ .Values.namespace }}
+  namespace: {{ .Release.Namespace }}
   labels:
     {{- include "fusion-forge.labels" . | nindent 4 }}
     app.kubernetes.io/component: watcher
@@ -123,14 +123,14 @@ apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
 metadata:
   name: fusion-forge-watcher-binding
-  namespace: {{ .Values.namespace }}
+  namespace: {{ .Release.Namespace }}
   labels:
     {{- include "fusion-forge.labels" . | nindent 4 }}
     app.kubernetes.io/component: watcher
 subjects:
   - kind: ServiceAccount
     name: {{ include "fusion-forge.watcherSAName" . }}
-    namespace: {{ .Values.namespace }}
+    namespace: {{ .Release.Namespace }}
 roleRef:
   kind: Role
   name: fusion-forge-watcher-role
@@ -164,5 +164,5 @@ roleRef:
 subjects:
   - kind: ServiceAccount
     name: {{ include "fusion-forge.serverSAName" . }}
-    namespace: {{ .Values.namespace }}
+    namespace: {{ .Release.Namespace }}
 {{- end }}
