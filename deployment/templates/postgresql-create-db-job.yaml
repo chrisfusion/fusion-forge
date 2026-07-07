@@ -1,0 +1,58 @@
+{{- if and (not .Values.postgresql.enabled) .Values.postgresql.createDatabaseJob.enabled }}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ .Release.Name }}-create-db
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "fusion-forge.labels" . | nindent 4 }}
+  annotations:
+    helm.sh/hook: pre-install,pre-upgrade
+    helm.sh/hook-weight: "-5"
+    helm.sh/hook-delete-policy: before-hook-creation,hook-succeeded
+spec:
+  backoffLimit: 3
+  activeDeadlineSeconds: {{ .Values.postgresql.createDatabaseJob.activeDeadlineSeconds }}
+  template:
+    metadata:
+      labels:
+        {{- include "fusion-forge.labels" . | nindent 8 }}
+    spec:
+      restartPolicy: Never
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      securityContext:
+        {{- toYaml .Values.postgresql.createDatabaseJob.podSecurityContext | nindent 8 }}
+      containers:
+        - name: create-db
+          image: {{ .Values.postgresql.createDatabaseJob.image }}
+          securityContext:
+            {{- toYaml .Values.postgresql.createDatabaseJob.containerSecurityContext | nindent 12 }}
+          env:
+            - name: PGHOST
+              value: {{ required "postgresql.external.host is required when postgresql.createDatabaseJob.enabled is true" .Values.postgresql.external.host | quote }}
+            - name: PGPORT
+              value: {{ include "fusion-forge.dbPort" . | quote }}
+            - name: PGUSER
+              value: {{ .Values.postgresql.createDatabaseJob.admin.username | quote }}
+            - name: PGPASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "fusion-forge.pgAdminSecretName" . }}
+                  key: {{ .Values.postgresql.createDatabaseJob.admin.existingSecretKey | default "password" }}
+            - name: TARGET_DB
+              value: {{ include "fusion-forge.dbName" . | quote }}
+          command: ["/bin/sh", "-c"]
+          args:
+            - |
+              set -eu
+              EXISTS=$(psql -d postgres -tAc "SELECT 1 FROM pg_database WHERE datname = :'target'" -v target="${TARGET_DB}")
+              if [ "${EXISTS}" = "1" ]; then
+                echo "database ${TARGET_DB} already exists on ${PGHOST}:${PGPORT} — nothing to do"
+              else
+                psql -d postgres -c "CREATE DATABASE \"${TARGET_DB}\""
+                echo "database ${TARGET_DB} created on ${PGHOST}:${PGPORT}"
+              fi
+{{- end }}

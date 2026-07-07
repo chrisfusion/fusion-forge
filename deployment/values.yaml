@@ -325,6 +325,44 @@ postgresql:
     existingSecret: ""          # must contain key "password"
     password: ""                # prefer existingSecret in production
 
+  # ---------------------------------------------------------------------------
+  # One-time database creation — external server only (postgresql.enabled: false).
+  # Runs as a Helm pre-install,pre-upgrade hook Job that creates the target
+  # database (idempotent) before the main Deployment is applied. It does NOT
+  # create tables — schema migrations are applied by the fusion-forge server
+  # binary itself on startup (internal/db/db.go, golang-migrate). Bundled mode
+  # (postgresql.enabled: true) never needs this — the postgres image's
+  # POSTGRES_DB env var creates the database on first boot.
+  #
+  # admin.* is a separate CREATEDB-privileged identity, distinct from
+  # postgresql.external.username/password above (the app's own runtime user,
+  # which may be unprivileged once the database already exists).
+  # ---------------------------------------------------------------------------
+  createDatabaseJob:
+    enabled: false
+    image: postgres:16-alpine
+    activeDeadlineSeconds: 120
+    # postgres:16-alpine runs as UID 70 (user "postgres") — matches the bundled
+    # StatefulSet convention. Only the psql client is used (non-interactive -c
+    # mode), so readOnlyRootFilesystem is safe with no extra volumes.
+    podSecurityContext:
+      runAsNonRoot: true
+      runAsUser: 70
+      seccompProfile:
+        type: RuntimeDefault
+    containerSecurityContext:
+      allowPrivilegeEscalation: false
+      readOnlyRootFilesystem: true
+      capabilities:
+        drop: ["ALL"]
+    admin:
+      username: postgres           # must have CREATEDB privilege on external.host
+      password: ""                 # fallback when existingSecret is empty (dev only) —
+                                    # chart then creates its own Secret named
+                                    # <release>-postgresql-admin-secret
+      existingSecret: ""           # name of a pre-existing Secret holding the password above
+      existingSecretKey: "password"
+
 # -----------------------------------------------------------------------------
 # Ingress (optional)
 # -----------------------------------------------------------------------------

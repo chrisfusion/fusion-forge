@@ -8,6 +8,7 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ## [Unreleased]
 
 ### Added
+- **External-database init job** (analogue to fusion-bff's `postgresql.createDatabaseJob`): new Helm `pre-install,pre-upgrade` hook Job (`deployment/templates/postgresql-create-db-job.yaml`) that idempotently runs `CREATE DATABASE` against an external Postgres server before the main Deployment installs; only relevant when `postgresql.enabled: false` — bundled mode already self-creates its database via the postgres image's `POSTGRES_DB` env var; does not create tables, schema is still applied by golang-migrate at server startup; gated behind `postgresql.createDatabaseJob.enabled` (default `false`) with a separate CREATEDB-privileged `admin.*` credential distinct from the app's own runtime `postgresql.external.*` user; `deployment/templates/postgresql-admin-secret.yaml` chart-manages the admin password when no `admin.existingSecret` is given; new `fusion-forge.pgAdminSecretName` helper in `_helpers.tpl`
 - **Zombie build cleanup** (`POST /api/v1/builds/zombie-cleanup`): detects and removes PENDING/BUILDING build rows whose Kubernetes CIBuild CR no longer exists; JSON body with `older_than` (RFC3339 timestamp, required) and optional `build_type` filter; for each zombie, the fusion-index artifact version is deleted best-effort before the DB row is removed; at most 1000 builds inspected per call; response includes `deleted` (IDs) and `failed` (ID + error) arrays
 
 ### Fixed

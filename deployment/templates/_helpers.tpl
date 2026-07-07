@@ -132,3 +132,16 @@ Resolution order:
   {{- end -}}
 {{- end -}}
 {{- end }}
+
+{{/*
+Secret name holding the CREATE DATABASE admin password used by postgresql-create-db-job
+(external mode only). Distinct from fusion-forge.dbSecretName, which holds the app's own
+runtime DB credentials — the admin identity here only needs CREATEDB on the target server.
+*/}}
+{{- define "fusion-forge.pgAdminSecretName" -}}
+{{- if .Values.postgresql.createDatabaseJob.admin.existingSecret -}}
+  {{- .Values.postgresql.createDatabaseJob.admin.existingSecret -}}
+{{- else -}}
+  {{- printf "%s-postgresql-admin-secret" .Release.Name -}}
+{{- end -}}
+{{- end }}
