@@ -5,10 +5,15 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
-## [Unreleased]
+## [0.10.0] — 2026-07-22
 
 ### Added
 - `config/samples/gitwatcher_private_repo.yaml` and `gitwatcher_app_autobuild.yaml` — GitWatcher samples demonstrating private-repo `tokenSecretRef` auth and `buildType: app` auto-build, watching `../fusion-testcases/testcases_v2/` (metrics-lib, streamlit-showcase). Feeds fusion-weave's new showroom `codeSourceApps` chains.
+- `AppSourceSpec.tokenSecretRef` / `GitSourceSpec.tokenSecretRef` (`api/v1alpha1/cibuild_types.go`) — the builder Job's own git clone can now authenticate against a private repository. `jobbuilder.BuildJob` injects a `GIT_TOKEN` env var sourced via `valueFrom.secretKeyRef` (never a literal value on the CIBuild spec); `builder/main.go` uses it through a git credential helper (`git -c credential.helper=...`, username fixed to `oauth2`) rather than embedding it in the clone URL, so the token never appears in `ps`/argv or in git's own stderr output if the clone fails.
+
+### Fixed
+- **Private-repo builds never actually worked**: `GitWatcher.spec.tokenSecretRef` only authenticated the watcher's own metadata pre-fetch (`FetchAppMetadata`/`FetchPyprojectMeta`); the actual builder Job (a separate pod running `builder/main.go`) did a bare `git clone` with no credentials at all, so every build against a private repo failed with `could not read Username`. Fixed by threading the token secret reference through `buildtrigger.AppBuildInput`/`GitBuildInput` → `CIBuild.spec.{app,git}Source.tokenSecretRef` → `jobbuilder`'s injected `GIT_TOKEN` env var → the builder's credential helper (see Added, above). Found via live end-to-end testing on minikube against a private Gitea repo.
+- `cmd/watcher/main.go` — the GitWatcher reconciler's manager client is cached by default, so resolving `tokenSecretRef` via `r.Get(...,&secret)` required `list`/`watch` RBAC on Secrets, not just `get` — the Role only grants `get` (matching the documented intent of minimal access), so every token resolution failed with `secrets is forbidden: ... cannot list resource "secrets"`. Fixed by excluding `corev1.Secret` from the manager's cache (`ctrl.Options.Client.Cache.DisableFor`) instead of widening RBAC to list every Secret in the namespace — `get`-only access is now actually sufficient, matching what the RBAC already granted.
 
 ## [0.9.0] — 2026-07-07
 

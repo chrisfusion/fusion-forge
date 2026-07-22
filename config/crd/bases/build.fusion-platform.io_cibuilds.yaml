@@ -62,6 +62,47 @@ spec:
               volume at /workspace inside the builder pod. This keeps the spec generic so future
               build types can supply different sets of input files.
             properties:
+              appSource:
+                description: AppSource specifies the repository and app metadata.
+                  Required when BuildType is "app".
+                properties:
+                  baseDependencies:
+                    description: |-
+                      BaseDependencies is the optional URL of a base venvpack to layer project requirements on top of.
+                      When empty the venv is built from scratch using the project's requirements.txt.
+                    type: string
+                  projectDir:
+                    description: ProjectDir is an optional relative path to the app
+                      project within the repository.
+                    type: string
+                  ref:
+                    description: Ref is the branch or tag to check out. Defaults to
+                      "main".
+                    type: string
+                  tokenSecretRef:
+                    description: |-
+                      TokenSecretRef, when set, references a Secret+key used to authenticate the
+                      builder Job's git clone of a private repository. Never inlined as a
+                      literal value on this spec — resolved by the kubelet via the builder
+                      container's env valueFrom.
+                    properties:
+                      key:
+                        description: Key is the key within the Secret whose value
+                          is the token.
+                        type: string
+                      name:
+                        description: Name is the name of the Secret.
+                        type: string
+                    required:
+                    - key
+                    - name
+                    type: object
+                  url:
+                    description: URL is the HTTPS git clone URL of the repository.
+                    type: string
+                required:
+                - url
+                type: object
               artifactName:
                 description: ArtifactName is the logical name of the artifact being
                   built (for display).
@@ -69,6 +110,17 @@ spec:
               artifactVersion:
                 description: ArtifactVersion is the semver version string of the artifact
                   being built (for display).
+                type: string
+              buildType:
+                description: |-
+                  BuildType identifies the build mode.
+                  "requirements" installs from a requirements.txt supplied via ConfigData.
+                  "git" clones a repository and builds from pyproject.toml.
+                  "app" clones a repository with metadata.yaml + requirements.txt + main.py.
+                enum:
+                - requirements
+                - git
+                - app
                 type: string
               builderImage:
                 description: BuilderImage is the container image used to execute the
@@ -79,15 +131,8 @@ spec:
                   type: string
                 description: |-
                   ConfigData holds filename→content pairs mounted as a ConfigMap volume at /workspace.
-                  For venv builds this contains "requirements.txt".
+                  For requirements builds this contains "requirements.txt"; empty for git builds.
                 type: object
-              buildType:
-                description: BuildType identifies the build strategy ("requirements", "git", or "app").
-                enum:
-                - requirements
-                - git
-                - app
-                type: string
               description:
                 description: Description is a human-readable description of the artifact.
                 type: string
@@ -212,38 +257,47 @@ spec:
                   - name
                   type: object
                 type: array
-              appSource:
-                description: AppSource specifies the repository and app metadata for app-type builds.
-                properties:
-                  baseDependencies:
-                    description: BaseDependencies is the optional URL of a base venvpack to layer project requirements on top of.
-                    type: string
-                  projectDir:
-                    description: ProjectDir is an optional relative path to the app project within the repository (monorepo support).
-                    type: string
-                  ref:
-                    description: Ref is the branch or tag to check out.
-                    type: string
-                  url:
-                    description: URL is the HTTPS URL of the git repository.
-                    type: string
-                required:
-                - url
-                type: object
               gitSource:
-                description: GitSource specifies the git repository to clone for git-type builds.
+                description: GitSource specifies the repository to clone. Required
+                  when BuildType is "git".
                 properties:
                   entrypointFile:
-                    description: EntrypointFile is an optional Python file at the project root to upload as a second artefact.
+                    description: |-
+                      EntrypointFile is the name of the optional Python file at the project root that
+                      acts as the runnable entry point. When set, the file is uploaded to fusion-index
+                      as a second artefact alongside the venv archive.
                     type: string
                   projectDir:
-                    description: ProjectDir is an optional relative path to the Python project within the repository (monorepo support).
+                    description: |-
+                      ProjectDir is an optional relative path to the Python project within the repository.
+                      Use this for monorepos where multiple projects live in separate subdirectories.
+                      When set, pyproject.toml, src/, and the entrypoint file are resolved relative to
+                      this directory instead of the repository root.
                     type: string
                   ref:
-                    description: Ref is the branch or tag to check out.
+                    description: Ref is the branch or tag to check out. Defaults to
+                      "main".
                     type: string
+                  tokenSecretRef:
+                    description: |-
+                      TokenSecretRef, when set, references a Secret+key used to authenticate the
+                      builder Job's git clone of a private repository. Never inlined as a
+                      literal value on this spec — resolved by the kubelet via the builder
+                      container's env valueFrom.
+                    properties:
+                      key:
+                        description: Key is the key within the Secret whose value
+                          is the token.
+                        type: string
+                      name:
+                        description: Name is the name of the Secret.
+                        type: string
+                    required:
+                    - key
+                    - name
+                    type: object
                   url:
-                    description: URL is the HTTPS URL of the git repository.
+                    description: URL is the https git clone URL of the repository.
                     type: string
                 required:
                 - url

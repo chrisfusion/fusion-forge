@@ -53,6 +53,7 @@ type GitBuildInput struct {
 	PythonVersion  string
 	BuilderImage   string
 	CreatorID      string
+	TokenSecretRef *buildv1alpha1.SecretKeyRef
 }
 
 // TriggerGitBuild registers the artifact in fusion-index, inserts a DB row, and
@@ -129,6 +130,7 @@ func TriggerGitBuild(ctx context.Context, deps Deps, inp GitBuildInput) (int64, 
 				Ref:            inp.RepoRef,
 				EntrypointFile: inp.EntrypointFile,
 				ProjectDir:     inp.ProjectDir,
+				TokenSecretRef: inp.TokenSecretRef,
 			},
 			ConfigData: map[string]string{},
 			Env: []corev1.EnvVar{
@@ -152,12 +154,13 @@ func TriggerGitBuild(ctx context.Context, deps Deps, inp GitBuildInput) (int64, 
 
 // AppBuildInput carries the fully resolved parameters for an app build.
 type AppBuildInput struct {
-	RepoURL      string
-	RepoRef      string
-	ProjectDir   string
-	CreatorID    string
-	BuilderImage string
-	Meta         gitutil.AppMetadata
+	RepoURL        string
+	RepoRef        string
+	ProjectDir     string
+	CreatorID      string
+	BuilderImage   string
+	Meta           gitutil.AppMetadata
+	TokenSecretRef *buildv1alpha1.SecretKeyRef
 }
 
 // TriggerAppBuild registers the artifact in fusion-index, inserts a DB row, and
@@ -231,6 +234,7 @@ func TriggerAppBuild(ctx context.Context, deps Deps, inp AppBuildInput) (int64, 
 				Ref:              inp.RepoRef,
 				ProjectDir:       inp.ProjectDir,
 				BaseDependencies: inp.Meta.BaseDependencies,
+				TokenSecretRef:   inp.TokenSecretRef,
 			},
 			ConfigData: map[string]string{},
 			Env: []corev1.EnvVar{

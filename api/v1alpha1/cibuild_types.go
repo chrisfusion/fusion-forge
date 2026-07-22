@@ -36,6 +36,13 @@ type AppSourceSpec struct {
 	// When empty the venv is built from scratch using the project's requirements.txt.
 	// +optional
 	BaseDependencies string `json:"baseDependencies,omitempty"`
+
+	// TokenSecretRef, when set, references a Secret+key used to authenticate the
+	// builder Job's git clone of a private repository. Never inlined as a
+	// literal value on this spec — resolved by the kubelet via the builder
+	// container's env valueFrom.
+	// +optional
+	TokenSecretRef *SecretKeyRef `json:"tokenSecretRef,omitempty"`
 }
 
 // GitSourceSpec specifies the git repository to clone for a git build.
@@ -59,6 +66,13 @@ type GitSourceSpec struct {
 	// this directory instead of the repository root.
 	// +optional
 	ProjectDir string `json:"projectDir,omitempty"`
+
+	// TokenSecretRef, when set, references a Secret+key used to authenticate the
+	// builder Job's git clone of a private repository. Never inlined as a
+	// literal value on this spec — resolved by the kubelet via the builder
+	// container's env valueFrom.
+	// +optional
+	TokenSecretRef *SecretKeyRef `json:"tokenSecretRef,omitempty"`
 }
 
 // CIBuildSpec defines the desired state of a CIBuild.

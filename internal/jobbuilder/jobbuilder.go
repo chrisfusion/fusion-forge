@@ -50,6 +50,24 @@ func mergeWithSystemWin(extra, system map[string]string) map[string]string {
 	return out
 }
 
+// gitTokenEnvVar builds the GIT_TOKEN env var sourced from a Secret key (never a literal
+// value) for authenticating the builder's git clone of a private repository. The kubelet
+// resolves the Secret at pod start; the operator never reads its value.
+func gitTokenEnvVar(ref *buildv1alpha1.SecretKeyRef) (corev1.EnvVar, bool) {
+	if ref == nil {
+		return corev1.EnvVar{}, false
+	}
+	return corev1.EnvVar{
+		Name: "GIT_TOKEN",
+		ValueFrom: &corev1.EnvVarSource{
+			SecretKeyRef: &corev1.SecretKeySelector{
+				LocalObjectReference: corev1.LocalObjectReference{Name: ref.Name},
+				Key:                  ref.Key,
+			},
+		},
+	}, true
+}
+
 // ConfigMapName returns the deterministic ConfigMap name for a CIBuild.
 func ConfigMapName(ciBuildName string) string {
 	return "forge-cfg-" + ciBuildName
@@ -136,6 +154,9 @@ func BuildJob(ciBuild *buildv1alpha1.CIBuild, configMapName string, opts BuildOp
 			corev1.EnvVar{Name: "ENTRYPOINT_FILE", Value: gs.EntrypointFile},
 			corev1.EnvVar{Name: "GIT_PROJECT_DIR", Value: gs.ProjectDir},
 		)
+		if tokenEnvVar, ok := gitTokenEnvVar(gs.TokenSecretRef); ok {
+			baseEnv = append(baseEnv, tokenEnvVar)
+		}
 	}
 	// For app builds inject AppSource fields as env vars so the builder binary can read them.
 	if ciBuild.Spec.BuildType == "app" && ciBuild.Spec.AppSource != nil {
@@ -146,6 +167,9 @@ func BuildJob(ciBuild *buildv1alpha1.CIBuild, configMapName string, opts BuildOp
 			corev1.EnvVar{Name: "GIT_PROJECT_DIR", Value: as.ProjectDir},
 			corev1.EnvVar{Name: "APP_BASE_DEPENDENCIES", Value: as.BaseDependencies},
 		)
+		if tokenEnvVar, ok := gitTokenEnvVar(as.TokenSecretRef); ok {
+			baseEnv = append(baseEnv, tokenEnvVar)
+		}
 	}
 	env := append(baseEnv, ciBuild.Spec.Env...)
 

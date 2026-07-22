@@ -197,11 +197,12 @@ func (r *GitWatcherReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 			return ctrl.Result{RequeueAfter: r.jitteredInterval(watcher.Name)}, nil
 		}
 		buildID, ciBuildName, triggerErr = buildtrigger.TriggerAppBuild(ctx, deps, buildtrigger.AppBuildInput{
-			RepoURL:      watcher.Spec.RepoURL,
-			RepoRef:      repoRef,
-			ProjectDir:   watcher.Spec.ProjectDir,
-			BuilderImage: builderImage,
-			Meta:         *appMeta,
+			RepoURL:        watcher.Spec.RepoURL,
+			RepoRef:        repoRef,
+			ProjectDir:     watcher.Spec.ProjectDir,
+			BuilderImage:   builderImage,
+			Meta:           *appMeta,
+			TokenSecretRef: watcher.Spec.TokenSecretRef,
 		})
 	} else {
 		pythonVersion := watcher.Spec.PythonVersion
@@ -226,6 +227,7 @@ func (r *GitWatcherReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 			ProjectDir:     watcher.Spec.ProjectDir,
 			PythonVersion:  pythonVersion,
 			BuilderImage:   builderImage,
+			TokenSecretRef: watcher.Spec.TokenSecretRef,
 		})
 	}
 	_ = buildID

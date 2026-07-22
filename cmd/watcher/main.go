@@ -10,6 +10,7 @@ import (
 	"os"
 	"time"
 
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
@@ -123,6 +124,14 @@ func main() {
 		Cache: cache.Options{
 			DefaultNamespaces: map[string]cache.Config{
 				namespace: {},
+			},
+		},
+		// Secrets are read one-by-one by name (tokenSecretRef) and are
+		// sensitive — bypass the informer cache instead of widening RBAC to
+		// list/watch every Secret in the namespace just to satisfy the cache.
+		Client: client.Options{
+			Cache: &client.CacheOptions{
+				DisableFor: []client.Object{&corev1.Secret{}},
 			},
 		},
 	})

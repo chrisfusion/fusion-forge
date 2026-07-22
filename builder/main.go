@@ -23,6 +23,9 @@
 //	                        as a second artefact alongside the venv archive.
 //	REQUIRE_PYPROJECT_TOML  "true"/"false" — enforce pyproject.toml presence (default: "true").
 //	REQUIRE_SRC_DIR         "true"/"false" — enforce src/ directory presence (default: "true").
+//	GIT_TOKEN               Optional: authenticates the clone of a private repository via a
+//	                        git credential helper (username fixed to "oauth2"). Never logged
+//	                        or embedded in the clone URL.
 //
 // Additional variables for BUILD_TYPE=app:
 //
@@ -33,6 +36,7 @@
 //	                        When set, the venvpack is downloaded and extracted; the project's
 //	                        requirements.txt is installed on top. When empty, a fresh venv is built.
 //	                        An unreachable URL causes the build to fail.
+//	GIT_TOKEN               Optional: same as for BUILD_TYPE=git.
 package main
 
 import (
@@ -123,7 +127,7 @@ func buildFromGit(ctx context.Context, uploadURL, archiveName, archivePath strin
 
 	// Step 1: clone the repository.
 	log.Printf("[forge-builder] cloning %s @ %s", repoURL, repoRef)
-	run("git", "clone", "--single-branch", "--depth=1", "--branch", repoRef, repoURL, srcDir)
+	run("git", gitCloneArgs(repoURL, repoRef, srcDir)...)
 
 	// projectRoot is the directory that contains pyproject.toml and src/.
 	// For monorepos this is a subdirectory of the clone; otherwise it is the clone root.
@@ -224,6 +228,20 @@ func archiveAndUpload(ctx context.Context, uploadURL, archiveName, archivePath s
 }
 
 // run executes a command and streams its output to stdout/stderr. Exits on failure.
+// gitCloneArgs returns the argument list for "git clone" of repoURL into dir at repoRef.
+// When GIT_TOKEN is set, a credential helper reads it from the environment at
+// credential-request time (username fixed to "oauth2", same convention as the
+// GitWatcher's own metadata pre-fetch in internal/gitutil) — unlike embedding the
+// token directly in the clone URL, the token then never appears in argv (visible via
+// ps) or in git's own stderr output, which can echo the URL it failed to reach.
+func gitCloneArgs(repoURL, repoRef, dir string) []string {
+	var args []string
+	if os.Getenv("GIT_TOKEN") != "" {
+		args = append(args, "-c", `credential.helper=!f() { echo username=oauth2; echo "password=$GIT_TOKEN"; }; f`)
+	}
+	return append(args, "clone", "--single-branch", "--depth=1", "--branch", repoRef, repoURL, dir)
+}
+
 func run(name string, args ...string) {
 	cmd := exec.Command(name, args...)
 	cmd.Stdout = os.Stdout
@@ -299,7 +317,7 @@ func buildFromApp(ctx context.Context, uploadURL, archiveName, archivePath strin
 
 	// Step 1: clone the repository.
 	log.Printf("[forge-builder] cloning %s @ %s", repoURL, repoRef)
-	run("git", "clone", "--single-branch", "--depth=1", "--branch", repoRef, repoURL, srcDir)
+	run("git", gitCloneArgs(repoURL, repoRef, srcDir)...)
 
 	projectRoot := srcDir
 	if projectDir != "" {
