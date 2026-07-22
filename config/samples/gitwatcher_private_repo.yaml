@@ -1,0 +1,44 @@
+# Sample: GitWatcher against a private repo using tokenSecretRef.
+#
+# Auth is always HTTPS clone URL + HTTP Basic Auth with a fixed username
+# "oauth2" and the token as password (works for both GitLab and GitHub
+# personal access tokens) — see internal/gitutil/remote.go and pyproject.go.
+#
+# repoURL below points at the private fusion-testcases repo's HTTPS clone URL.
+# Replace <your-git-host> with your actual host (the repo's git remote may be
+# an SSH shorthand like git@work:chrisfusion/fusion-testcases.git — resolve
+# that to the equivalent HTTPS URL for your host before applying).
+#
+# buildType: git — watches testcases_v2/git-builds/metrics-lib, a plain
+# pip-installable library (pyproject.toml, no console entry point).
+#
+# Create the token secret first:
+#   kubectl create secret generic fusion-testcases-token -n fusion \
+#     --from-literal=token=<your-personal-access-token>
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: fusion-testcases-token
+  namespace: fusion
+type: Opaque
+stringData:
+  token: "change-me"
+---
+apiVersion: build.fusion-platform.io/v1alpha1
+kind: GitWatcher
+metadata:
+  name: metrics-lib-watcher
+  namespace: fusion
+spec:
+  repoURL: https://<your-git-host>/chrisfusion/fusion-testcases.git
+  repoRef: main
+  buildType: git
+  enabled: true
+  metadataSource: full
+  projectDir: testcases_v2/git-builds/metrics-lib
+  pythonVersion: "3.12"
+  description: "Showroom: private-repo token auth demo, watches metrics-lib"
+  tokenSecretRef:
+    name: fusion-testcases-token
+    key: token

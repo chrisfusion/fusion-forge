@@ -1,0 +1,30 @@
+# Sample: GitWatcher with buildType: app — auto-builds and publishes
+# testcases_v2/app-builds/streamlit-showcase to fusion-index on every push
+# to `main`, no manual POST /api/v1/appbuilds call needed.
+#
+# metadataSource/name/version are ignored for buildType: app — name, version,
+# and builderImage always come from the target's own metadata.yaml.
+#
+# Feeds fusion-weave's showroom.codeSourceApps.streamlitShowcase chain
+# (artifact app.streamlit-showcase, tag "stable" once published) — see
+# ../fusion-testcases/testcases_v2/README.md.
+#
+# fusion-testcases is a private repo — reuses the same fusion-testcases-token
+# Secret created in gitwatcher_private_repo.yaml (apply that file first, or
+# create the Secret standalone if you only want this watcher).
+---
+apiVersion: build.fusion-platform.io/v1alpha1
+kind: GitWatcher
+metadata:
+  name: streamlit-showcase-watcher
+  namespace: fusion
+spec:
+  repoURL: https://<your-git-host>/chrisfusion/fusion-testcases.git
+  repoRef: main
+  buildType: app
+  enabled: true
+  projectDir: testcases_v2/app-builds/streamlit-showcase
+  description: "Showroom: GitWatcher auto-build demo, watches streamlit-showcase"
+  tokenSecretRef:
+    name: fusion-testcases-token
+    key: token

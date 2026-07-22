@@ -7,6 +7,9 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+### Added
+- `config/samples/gitwatcher_private_repo.yaml` and `gitwatcher_app_autobuild.yaml` — GitWatcher samples demonstrating private-repo `tokenSecretRef` auth and `buildType: app` auto-build, watching `../fusion-testcases/testcases_v2/` (metrics-lib, streamlit-showcase). Feeds fusion-weave's new showroom `codeSourceApps` chains.
+
 ## [0.9.0] — 2026-07-07
 
 ### Added
