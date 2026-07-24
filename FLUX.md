@@ -14,6 +14,37 @@ Each environment maps to one cluster. The Flux configuration lives in `flux/` in
 
 ---
 
+## Directory structure
+
+```
+flux/
+  sources/
+    helmrepository.yaml          # Helm chart registry
+    imagerepository.yaml         # Container image registries (forge + builder)
+    imagepolicy.yaml             # Semver policy: always highest tag
+    imageupdateautomation.yaml   # Auto-commits tag updates back to this repo
+  environments/
+    dev/
+      namespace.yaml
+      helmrelease.yaml
+    staging/
+      namespace.yaml
+      helmrelease.yaml
+    prod/
+      namespace.yaml
+      helmrelease.yaml
+  clusters/
+    dev.yaml      # Flux Kustomizations — apply to dev cluster
+    staging.yaml  # Flux Kustomizations — apply to staging cluster
+    prod.yaml     # Flux Kustomizations — apply to prod cluster
+```
+
+Each cluster file installs two Flux `Kustomization` objects:
+1. `fusion-forge-sources` — applies `flux/sources/` (HelmRepository, ImagePolicies)
+2. `fusion-forge-{env}` — applies `flux/environments/{env}/` (Namespace, HelmRelease); depends on sources
+
+---
+
 ## Prerequisites
 
 Install these tools on the machine you use to operate the clusters:
@@ -169,6 +200,14 @@ kubectl create secret generic fusion-forge-db-secret \
 kubectl create secret generic fusion-forge-db-secret \
   --from-literal=password=<prod-db-password> \
   -n prod-fusion
+```
+
+### GitWatcher CRD (all clusters)
+
+The `GitWatcher` CRD is **not Flux/Helm-managed** (to avoid field-manager conflicts) — apply it manually to each cluster once, before the first `HelmRelease` reconcile:
+
+```bash
+kubectl apply -f config/crd/bases/build.fusion-platform.io_gitwatchers.yaml
 ```
 
 ---

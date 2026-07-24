@@ -112,6 +112,7 @@ migrations/
 Dockerfile                 # builds /server + /operator + /watcher; default ENTRYPOINT is /server
 Makefile
 flux/                      # Flux GitOps — sources/, environments/dev|staging|prod/, clusters/dev|staging|prod.yaml
+README.md / ARCHITECTURE.md / EXAMPLES.md / FLUX.md / CHANGELOG.md   # canonical top-level docs (as of 2026-07)
 ```
 
 ## Platform Context
@@ -281,6 +282,7 @@ Short name: `gw` — `kubectl get gw -n fusion`
 
 ## Gotchas
 
+- **Canonical docs are README.md, ARCHITECTURE.md, EXAMPLES.md, FLUX.md, CHANGELOG.md**: `install.md`/`INSTALL.md` (a stale case-duplicate pair), `example.md`, `testing.md`, and `flux/README.md` were deleted/merged into these on 2026-07-24 — don't recreate them or link to them
 - **Helm release name is `fusion-forge` in namespace `fusion`**: use `helm upgrade fusion-forge deployment/ -n fusion` for all updates; `k8s/deployment.yaml` is kept as reference only and is NOT the live deployment
 - **StatefulSet deletion preserves the PVC**: `data-fusion-forge-postgresql-0` survives `kubectl delete statefulset` — safe to delete and reinstall without losing DB data
 - **Helm upgrade fails with StatefulSet immutable field**: if `helm upgrade` errors "StatefulSet is invalid: spec: Forbidden", run `kubectl delete statefulset fusion-forge-postgresql -n fusion` then re-run `helm upgrade`; the PVC survives so no data is lost

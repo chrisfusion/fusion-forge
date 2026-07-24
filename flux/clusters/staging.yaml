@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Apply this file to the staging cluster after Flux bootstrap:
 #   kubectl apply -f flux/clusters/staging.yaml
-# Or pass --path=flux/clusters/staging during flux bootstrap (see flux/README.md).
+# Or pass --path=flux/clusters/staging during flux bootstrap (see ../../FLUX.md).
 ---
 # Shared sources: HelmRepository, ImageRepository, ImagePolicy, ImageUpdateAutomation.
 apiVersion: kustomize.toolkit.fluxcd.io/v1

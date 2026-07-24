@@ -5,6 +5,11 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [Unreleased]
+
+### Changed
+- **Documentation refresh and consolidation**: README.md, ARCHITECTURE.md, and EXAMPLES.md rewritten to cover everything added since v0.4.0 (app builds, GitWatcher CRD + REST CRUD + watcher binary, bulk-delete/zombie-cleanup, structured logging, `python_version` selection, private-repo token auth, builder-images ConfigMap). `example.md` merged into `EXAMPLES.md`; `flux/README.md` merged into `FLUX.md`; `install.md`/`INSTALL.md` (a stale case-duplicate pair with divergent content, the source of a broken link from README.md) and the `testing.md` redirect stub were deleted, with the essential Helm install/upgrade/uninstall steps folded into README.md
+
 ## [0.10.0] — 2026-07-22
 
 ### Added
