@@ -35,6 +35,8 @@ type VenvBuild struct {
 	PythonVersion        string
 	Runner               *string
 	BaseDependenciesURL  *string
+	FileUploadMode       *string
+	Files                []string
 	CreatedAt            time.Time
 	UpdatedAt            time.Time
 }
@@ -81,6 +83,8 @@ type CreateAppBuildParams struct {
 	PythonVersion        string
 	Runner               *string
 	BaseDependenciesURL  *string
+	FileUploadMode       *string
+	Files                []string
 }
 
 // ListParams holds pagination and filter options for listing VenvBuilds.
@@ -108,7 +112,7 @@ func New(pool *pgxpool.Pool) *Queries {
 const scanCols = ` id, name, version, description, status, creator_id, creator_email,
 	index_artifact_id, index_artifact_version, ci_build_name,
 	build_type, repo_url, repo_ref, entrypoint_file, metadata_source, project_dir, python_version,
-	runner, base_dependencies_url,
+	runner, base_dependencies_url, file_upload_mode, files,
 	created_at, updated_at `
 
 func scan(row pgx.Row) (VenvBuild, error) {
@@ -119,7 +123,7 @@ func scan(row pgx.Row) (VenvBuild, error) {
 		&b.IndexArtifactID, &b.IndexArtifactVersion,
 		&b.CIBuildName,
 		&b.BuildType, &b.RepoURL, &b.RepoRef, &b.EntrypointFile, &b.MetadataSource, &b.ProjectDir, &b.PythonVersion,
-		&b.Runner, &b.BaseDependenciesURL,
+		&b.Runner, &b.BaseDependenciesURL, &b.FileUploadMode, &b.Files,
 		&b.CreatedAt, &b.UpdatedAt,
 	)
 	return b, err
@@ -167,16 +171,16 @@ func (q *Queries) CreateAppBuild(ctx context.Context, p CreateAppBuildParams) (i
 			(name, version, description, status, creator_id,
 			 index_artifact_id, index_artifact_version,
 			 build_type, repo_url, repo_ref, project_dir, python_version,
-			 runner, base_dependencies_url,
+			 runner, base_dependencies_url, file_upload_mode, files,
 			 created_at, updated_at)
-		VALUES ($1,$2,$3,'PENDING',$4,$5,$6,'app',$7,$8,$9,$10,$11,$12,NOW(),NOW())
+		VALUES ($1,$2,$3,'PENDING',$4,$5,$6,'app',$7,$8,$9,$10,$11,$12,$13,$14,NOW(),NOW())
 		RETURNING id`
 	var id int64
 	err := q.pool.QueryRow(ctx, query,
 		p.Name, p.Version, p.Description, p.CreatorID,
 		p.IndexArtifactID, p.IndexArtifactVersion,
 		p.RepoURL, p.RepoRef, p.ProjectDir, p.PythonVersion,
-		p.Runner, p.BaseDependenciesURL,
+		p.Runner, p.BaseDependenciesURL, p.FileUploadMode, p.Files,
 	).Scan(&id)
 	return id, err
 }

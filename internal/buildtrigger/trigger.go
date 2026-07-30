@@ -204,6 +204,8 @@ func TriggerAppBuild(ctx context.Context, deps Deps, inp AppBuildInput) (int64, 
 		PythonVersion:        inp.Meta.BuilderImage,
 		Runner:               runner,
 		BaseDependenciesURL:  baseDepsURL,
+		FileUploadMode:       strPtr(inp.Meta.FileUploadMode),
+		Files:                inp.Meta.Files,
 	})
 	if err != nil {
 		if isUniqueViolation(err) {
@@ -234,6 +236,8 @@ func TriggerAppBuild(ctx context.Context, deps Deps, inp AppBuildInput) (int64, 
 				Ref:              inp.RepoRef,
 				ProjectDir:       inp.ProjectDir,
 				BaseDependencies: inp.Meta.BaseDependencies,
+				FileUploadMode:   inp.Meta.FileUploadMode,
+				Files:            inp.Meta.Files,
 				TokenSecretRef:   inp.TokenSecretRef,
 			},
 			ConfigData: map[string]string{},

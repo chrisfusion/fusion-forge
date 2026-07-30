@@ -37,6 +37,20 @@ type AppSourceSpec struct {
 	// +optional
 	BaseDependencies string `json:"baseDependencies,omitempty"`
 
+	// FileUploadMode controls which loose Python files are uploaded to fusion-index
+	// alongside the venv archive. "legacy" (default) requires and uploads exactly
+	// main.py. "auto" uploads every top-level *.py file found in the project. "list"
+	// uploads exactly the files named in Files. Derived from metadata.yaml's `files`
+	// key — see gitutil.AppMetadata.FileUploadMode.
+	// +kubebuilder:validation:Enum=legacy;auto;list
+	// +optional
+	FileUploadMode string `json:"fileUploadMode,omitempty"`
+
+	// Files is the explicit whitelist of filenames to upload. Only used when
+	// FileUploadMode is "list".
+	// +optional
+	Files []string `json:"files,omitempty"`
+
 	// TokenSecretRef, when set, references a Secret+key used to authenticate the
 	// builder Job's git clone of a private repository. Never inlined as a
 	// literal value on this spec — resolved by the kubelet via the builder
@@ -99,7 +113,8 @@ type CIBuildSpec struct {
 	// BuildType identifies the build mode.
 	// "requirements" installs from a requirements.txt supplied via ConfigData.
 	// "git" clones a repository and builds from pyproject.toml.
-	// "app" clones a repository with metadata.yaml + requirements.txt + main.py.
+	// "app" clones a repository with metadata.yaml + requirements.txt, plus main.py
+	// (legacy mode) or one/many loose Python files selected via metadata.yaml's `files` key.
 	// +kubebuilder:validation:Enum=requirements;git;app
 	// +optional
 	BuildType string `json:"buildType,omitempty"`

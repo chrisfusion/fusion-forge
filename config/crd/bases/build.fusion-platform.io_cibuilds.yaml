@@ -71,6 +71,25 @@ spec:
                       BaseDependencies is the optional URL of a base venvpack to layer project requirements on top of.
                       When empty the venv is built from scratch using the project's requirements.txt.
                     type: string
+                  fileUploadMode:
+                    description: |-
+                      FileUploadMode controls which loose Python files are uploaded to fusion-index
+                      alongside the venv archive. "legacy" (default) requires and uploads exactly
+                      main.py. "auto" uploads every top-level *.py file found in the project. "list"
+                      uploads exactly the files named in Files. Derived from metadata.yaml's `files`
+                      key — see gitutil.AppMetadata.FileUploadMode.
+                    enum:
+                    - legacy
+                    - auto
+                    - list
+                    type: string
+                  files:
+                    description: |-
+                      Files is the explicit whitelist of filenames to upload. Only used when
+                      FileUploadMode is "list".
+                    items:
+                      type: string
+                    type: array
                   projectDir:
                     description: ProjectDir is an optional relative path to the app
                       project within the repository.
@@ -116,7 +135,9 @@ spec:
                   BuildType identifies the build mode.
                   "requirements" installs from a requirements.txt supplied via ConfigData.
                   "git" clones a repository and builds from pyproject.toml.
-                  "app" clones a repository with metadata.yaml + requirements.txt + main.py.
+                  "app" clones a repository with metadata.yaml + requirements.txt, plus main.py
+                  (legacy mode) or one/many loose Python files selected via metadata.yaml's
+                  `files` key.
                 enum:
                 - requirements
                 - git

@@ -1,0 +1,18 @@
+# Sample: GitWatcher with buildType: app — auto-builds testcases_v2/app-builds/etl-pipeline,
+# the multi-entrypoint files:[] example, from the internal Gitea test repo.
+# See ../fusion-testcases/testcases_v2/README.md and app-builds/etl-pipeline/EXPLANATION.md.
+apiVersion: build.fusion-platform.io/v1alpha1
+kind: GitWatcher
+metadata:
+  name: etl-pipeline-watcher
+  namespace: fusion
+spec:
+  repoURL: http://gitea.fusion.local/gitea_admin/fusion-testcases.git
+  repoRef: main
+  buildType: app
+  enabled: true
+  projectDir: testcases_v2/app-builds/etl-pipeline
+  description: "Showroom: auto-build etl-pipeline (files:[] multi-entrypoint) from internal Gitea"
+  tokenSecretRef:
+    name: fusion-testcases-token
+    key: token

@@ -36,6 +36,13 @@
 //	                        When set, the venvpack is downloaded and extracted; the project's
 //	                        requirements.txt is installed on top. When empty, a fresh venv is built.
 //	                        An unreachable URL causes the build to fail.
+//	APP_FILE_UPLOAD_MODE    "legacy" (default), "auto", or "list". Selects which loose Python
+//	                        files are uploaded to fusion-index alongside the venv archive:
+//	                        "legacy" requires and uploads exactly main.py (pre-existing
+//	                        behavior); "auto" uploads every top-level *.py file found in the
+//	                        project; "list" uploads exactly the files named in APP_FILES.
+//	APP_FILES               Comma-separated filenames to upload. Only read when
+//	                        APP_FILE_UPLOAD_MODE=list.
 //	GIT_TOKEN               Optional: same as for BUILD_TYPE=git.
 package main
 
@@ -170,15 +177,7 @@ func buildFromGit(ctx context.Context, uploadURL, archiveName, archivePath strin
 	// Step 7: upload the entrypoint file as a second artefact (if configured).
 	// The entrypoint path is relative to projectRoot, not to the repo root.
 	if entrypointFile != "" {
-		entrypointPath := filepath.Join(projectRoot, entrypointFile)
-		fi, err := os.Stat(entrypointPath)
-		if err != nil {
-			log.Fatalf("[forge-builder] entrypoint file %q not found: %v", entrypointFile, err)
-		}
-		log.Printf("[forge-builder] uploading entrypoint %s (%d bytes)", entrypointFile, fi.Size())
-		if err := uploadFile(ctx, uploadURL, entrypointFile, entrypointPath); err != nil {
-			log.Fatalf("[forge-builder] entrypoint upload failed: %v", err)
-		}
+		uploadProjectFile(ctx, uploadURL, projectRoot, entrypointFile)
 	}
 }
 
@@ -310,10 +309,12 @@ func uploadFile(ctx context.Context, uploadURL, filename, path string) error {
 // optionally downloads and extracts a base venvpack, installs project requirements on top,
 // archives the venv, and uploads the venvpack, main.py, and metadata.yaml to fusion-index.
 func buildFromApp(ctx context.Context, uploadURL, archiveName, archivePath string) {
-	repoURL      := mustEnv("GIT_REPO_URL")
-	repoRef      := envDefault("GIT_REF", "main")
-	projectDir   := envDefault("GIT_PROJECT_DIR", "")
-	baseDepsURL  := envDefault("APP_BASE_DEPENDENCIES", "")
+	repoURL        := mustEnv("GIT_REPO_URL")
+	repoRef        := envDefault("GIT_REF", "main")
+	projectDir     := envDefault("GIT_PROJECT_DIR", "")
+	baseDepsURL    := envDefault("APP_BASE_DEPENDENCIES", "")
+	fileUploadMode := envDefault("APP_FILE_UPLOAD_MODE", "legacy")
+	listedFiles    := splitCSV(envDefault("APP_FILES", ""))
 
 	// Step 1: clone the repository.
 	log.Printf("[forge-builder] cloning %s @ %s", repoURL, repoRef)
@@ -326,7 +327,7 @@ func buildFromApp(ctx context.Context, uploadURL, archiveName, archivePath strin
 	}
 
 	// Step 2: validate app structure.
-	validateAppStructure(projectRoot)
+	validateAppStructure(projectRoot, fileUploadMode, listedFiles)
 
 	pip := filepath.Join(venvDir, "bin", "pip")
 
@@ -373,27 +374,72 @@ func buildFromApp(ctx context.Context, uploadURL, archiveName, archivePath strin
 	// Step 6: archive and upload the venv (source is now inside site-packages).
 	archiveAndUpload(ctx, uploadURL, archiveName, archivePath)
 
-	// Step 7: upload main.py.
-	mainPyPath := filepath.Join(projectRoot, "main.py")
-	fi, err := os.Stat(mainPyPath)
-	if err != nil {
-		log.Fatalf("[forge-builder] main.py not found: %v", err)
-	}
-	log.Printf("[forge-builder] uploading main.py (%d bytes)", fi.Size())
-	if err := uploadFile(ctx, uploadURL, "main.py", mainPyPath); err != nil {
-		log.Fatalf("[forge-builder] main.py upload failed: %v", err)
+	// Step 7: upload loose Python file(s) per fileUploadMode.
+	switch fileUploadMode {
+	case "auto":
+		pyFiles, err := discoverTopLevelPyFiles(projectRoot)
+		if err != nil {
+			log.Fatalf("[forge-builder] discover python files: %v", err)
+		}
+		log.Printf("[forge-builder] auto-discovered %d python file(s): %v", len(pyFiles), pyFiles)
+		for _, name := range pyFiles {
+			uploadProjectFile(ctx, uploadURL, projectRoot, name)
+		}
+	case "list":
+		for _, name := range listedFiles {
+			uploadProjectFile(ctx, uploadURL, projectRoot, name)
+		}
+	default: // "legacy"
+		uploadProjectFile(ctx, uploadURL, projectRoot, "main.py")
 	}
 
 	// Step 8: upload metadata.yaml.
-	metaPath := filepath.Join(projectRoot, "metadata.yaml")
-	fi, err = os.Stat(metaPath)
+	uploadProjectFile(ctx, uploadURL, projectRoot, "metadata.yaml")
+}
+
+// uploadProjectFile stats and uploads a single file relative to projectRoot,
+// failing the build if the file is missing or the upload fails.
+func uploadProjectFile(ctx context.Context, uploadURL, projectRoot, name string) {
+	path := filepath.Join(projectRoot, name)
+	fi, err := os.Stat(path)
 	if err != nil {
-		log.Fatalf("[forge-builder] metadata.yaml not found: %v", err)
+		log.Fatalf("[forge-builder] %s not found: %v", name, err)
 	}
-	log.Printf("[forge-builder] uploading metadata.yaml (%d bytes)", fi.Size())
-	if err := uploadFile(ctx, uploadURL, "metadata.yaml", metaPath); err != nil {
-		log.Fatalf("[forge-builder] metadata.yaml upload failed: %v", err)
+	log.Printf("[forge-builder] uploading %s (%d bytes)", name, fi.Size())
+	if err := uploadFile(ctx, uploadURL, name, path); err != nil {
+		log.Fatalf("[forge-builder] %s upload failed: %v", name, err)
 	}
+}
+
+// discoverTopLevelPyFiles returns the names (not paths) of every *.py file
+// directly in projectRoot, non-recursive.
+func discoverTopLevelPyFiles(projectRoot string) ([]string, error) {
+	entries, err := os.ReadDir(projectRoot)
+	if err != nil {
+		return nil, err
+	}
+	var files []string
+	for _, e := range entries {
+		if !e.IsDir() && strings.HasSuffix(e.Name(), ".py") {
+			files = append(files, e.Name())
+		}
+	}
+	return files, nil
+}
+
+// splitCSV splits a comma-separated list, trimming whitespace and dropping
+// empty entries. Returns nil for an empty input string.
+func splitCSV(s string) []string {
+	if s == "" {
+		return nil
+	}
+	var out []string
+	for _, part := range strings.Split(s, ",") {
+		if part = strings.TrimSpace(part); part != "" {
+			out = append(out, part)
+		}
+	}
+	return out
 }
 
 // findSitePackages returns the site-packages path inside the venv.
@@ -406,11 +452,24 @@ func findSitePackages() string {
 }
 
 // validateAppStructure checks that the repository contains the required app files.
-func validateAppStructure(repoDir string) {
+// main.py is only required in "legacy" mode; in "list" mode every listed file must
+// exist upfront so the build fails fast instead of after building the venv.
+func validateAppStructure(repoDir, fileUploadMode string, listedFiles []string) {
 	log.Println("[forge-builder] validating app structure")
-	for _, name := range []string{"metadata.yaml", "requirements.txt", "main.py"} {
+	required := []string{"metadata.yaml", "requirements.txt"}
+	if fileUploadMode == "legacy" {
+		required = append(required, "main.py")
+	}
+	for _, name := range required {
 		if _, err := os.Stat(filepath.Join(repoDir, name)); os.IsNotExist(err) {
 			log.Fatalf("[forge-builder] structure check failed: %s not found at project root", name)
+		}
+	}
+	if fileUploadMode == "list" {
+		for _, name := range listedFiles {
+			if _, err := os.Stat(filepath.Join(repoDir, name)); os.IsNotExist(err) {
+				log.Fatalf("[forge-builder] structure check failed: listed file %q not found at project root", name)
+			}
 		}
 	}
 	log.Println("[forge-builder] app structure validation passed")

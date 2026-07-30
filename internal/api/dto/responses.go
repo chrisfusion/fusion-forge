@@ -32,6 +32,8 @@ type VenvBuildResponse struct {
 	PythonVersion        string     `json:"pythonVersion"`
 	Runner               *string    `json:"runner,omitempty"`
 	BaseDependenciesURL  *string    `json:"baseDependenciesUrl,omitempty"`
+	FileUploadMode       *string    `json:"fileUploadMode,omitempty"`
+	Files                []string   `json:"files,omitempty"`
 	CreatedAt            time.Time  `json:"createdAt"`
 	UpdatedAt            time.Time  `json:"updatedAt"`
 }
@@ -58,6 +60,8 @@ func ToResponse(b db.VenvBuild) VenvBuildResponse {
 		PythonVersion:        b.PythonVersion,
 		Runner:               b.Runner,
 		BaseDependenciesURL:  b.BaseDependenciesURL,
+		FileUploadMode:       b.FileUploadMode,
+		Files:                b.Files,
 		CreatedAt:            b.CreatedAt,
 		UpdatedAt:            b.UpdatedAt,
 	}

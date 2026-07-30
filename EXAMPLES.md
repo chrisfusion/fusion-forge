@@ -318,6 +318,18 @@ curl -s $BASE/api/v1/gitbuilds/7/logs
 
 App builds only need the repository coordinates — `name`, `version`, `builderImage`, and `runner` are all read from the repository's `metadata.yaml`. See `../fusion-testcases/simple_streamlit_template/` for a reference `metadata.yaml` / `requirements.txt` / `main.py` layout.
 
+#### Multi-script builds via `files`
+
+`metadata.yaml` accepts an optional `files` key controlling which loose Python files are uploaded to fusion-index alongside the venv archive, for repos with several standalone scripts (e.g. `extract.py`/`transform.py`/`load.py`) sharing one `requirements.txt` — each later picked as a different entrypoint by a separate consumer (e.g. a fusion-flux chain step), instead of one fixed `main.py`.
+
+- **Key absent (default)** — unchanged legacy behavior: `main.py` is required and is the only file uploaded.
+- **`files: []`** (present, empty) — auto-discovers and uploads every top-level `*.py` file (non-recursive; subdirectories are still bundled into the venv's `site-packages` as before). `main.py` is not required.
+- **`files: [extract.py, transform.py, load.py]`** — uploads exactly those files (fails fast if any is missing). `main.py` is not required.
+
+Filenames are validated the same way as `project_dir` — absolute paths and `..` path segments are rejected at fetch time (`gitutil.FetchAppMetadata`), since `metadata.yaml` content is repo-controlled and flows unsanitized into the builder pod's filesystem.
+
+Do not put a per-consumer entrypoint selector under `runner.args` on an artifact meant for multiple different entrypoints — `runner.args` keys are injected as env vars unconditionally by downstream consumers and will silently win over any per-step override. Omit `runner` entirely (or set only `runner.type`, without `args`) for this shape. See `../fusion-testcases/testcases_v2/venv-builds/etl-pipeline/EXPLANATION.md` for the mechanism this avoids (documented there against fusion-weave's `codesource.EnvVars`), and `../fusion-testcases/testcases_v2/app-builds/` for the single-entrypoint `runner.args.ENTRYPOINT` pattern this complements.
+
 ### Validate
 
 ```bash

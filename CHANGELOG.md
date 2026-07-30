@@ -7,6 +7,9 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+### Added
+- **App builds support multiple loose Python files via metadata.yaml's `files` key** — for repos with several standalone scripts sharing one `requirements.txt` (e.g. an ETL chain's `extract.py`/`transform.py`/`load.py`), each later picked as a different entrypoint by a separate consumer instead of one fixed `main.py`. Absent `files` key preserves the existing behavior (`main.py` required and uploaded); `files: []` auto-discovers and uploads every top-level `*.py` file; `files: [a.py, b.py]` uploads exactly those. Threaded through `gitutil.AppMetadata.FileUploadMode`/`Files` → `AppSourceSpec.fileUploadMode`/`files` (new CRD fields) → `APP_FILE_UPLOAD_MODE`/`APP_FILES` env vars → `builder/main.go`'s `buildFromApp`. Persisted on the `venv_build` row (`file_upload_mode`, `files` columns, migration `000007`) and surfaced on `VenvBuildResponse` for observability, matching how `runner`/`baseDependenciesUrl` are already handled.
+
 ### Changed
 - **Documentation refresh and consolidation**: README.md, ARCHITECTURE.md, and EXAMPLES.md rewritten to cover everything added since v0.4.0 (app builds, GitWatcher CRD + REST CRUD + watcher binary, bulk-delete/zombie-cleanup, structured logging, `python_version` selection, private-repo token auth, builder-images ConfigMap). `example.md` merged into `EXAMPLES.md`; `flux/README.md` merged into `FLUX.md`; `install.md`/`INSTALL.md` (a stale case-duplicate pair with divergent content, the source of a broken link from README.md) and the `testing.md` redirect stub were deleted, with the essential Helm install/upgrade/uninstall steps folded into README.md
 

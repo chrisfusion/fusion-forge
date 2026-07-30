@@ -5,6 +5,8 @@
 package jobbuilder
 
 import (
+	"strings"
+
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -166,7 +168,11 @@ func BuildJob(ciBuild *buildv1alpha1.CIBuild, configMapName string, opts BuildOp
 			corev1.EnvVar{Name: "GIT_REF", Value: as.Ref},
 			corev1.EnvVar{Name: "GIT_PROJECT_DIR", Value: as.ProjectDir},
 			corev1.EnvVar{Name: "APP_BASE_DEPENDENCIES", Value: as.BaseDependencies},
+			corev1.EnvVar{Name: "APP_FILE_UPLOAD_MODE", Value: as.FileUploadMode},
 		)
+		if as.FileUploadMode == "list" {
+			baseEnv = append(baseEnv, corev1.EnvVar{Name: "APP_FILES", Value: strings.Join(as.Files, ",")})
+		}
 		if tokenEnvVar, ok := gitTokenEnvVar(as.TokenSecretRef); ok {
 			baseEnv = append(baseEnv, tokenEnvVar)
 		}
