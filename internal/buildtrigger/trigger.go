@@ -204,8 +204,12 @@ func TriggerAppBuild(ctx context.Context, deps Deps, inp AppBuildInput) (int64, 
 		PythonVersion:        inp.Meta.BuilderImage,
 		Runner:               runner,
 		BaseDependenciesURL:  baseDepsURL,
-		FileUploadMode:       strPtr(inp.Meta.FileUploadMode),
-		Files:                inp.Meta.Files,
+		// FileUploadMode is a *string here (db.CreateAppBuildParams column is
+		// nullable) because git/requirements-build rows never set it, unlike
+		// AppSourceSpec.FileUploadMode below which is a plain string on the CR
+		// and is always one of "legacy"/"auto"/"list" for app builds.
+		FileUploadMode: strPtr(inp.Meta.FileUploadMode),
+		Files:          inp.Meta.Files,
 	})
 	if err != nil {
 		if isUniqueViolation(err) {

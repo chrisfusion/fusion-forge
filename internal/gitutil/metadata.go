@@ -98,10 +98,15 @@ func parseAppMetadata(content string) (AppMetadata, error) {
 	if m.BuilderImage == "" {
 		return AppMetadata{}, fmt.Errorf("metadata.yaml: builderImage is not set")
 	}
+	seenFiles := make(map[string]bool, len(m.Files))
 	for _, name := range m.Files {
 		if err := validateFileEntry(name); err != nil {
 			return AppMetadata{}, fmt.Errorf("metadata.yaml: files: %w", err)
 		}
+		if seenFiles[name] {
+			return AppMetadata{}, fmt.Errorf("metadata.yaml: files: %q is listed more than once", name)
+		}
+		seenFiles[name] = true
 	}
 	return AppMetadata{
 		Name:             m.Name,
@@ -128,20 +133,36 @@ func fileUploadMode(files []string) string {
 	}
 }
 
-// validateFileEntry rejects absolute paths and any path that would escape the
-// project root, mirroring handlers.validateProjectDir — metadata.yaml is
-// repo-controlled content and its `files` entries flow unsanitized into the
-// builder pod's filesystem (filepath.Join + os.Stat/upload).
+// validateFileEntry rejects anything but a flat, plain filename: metadata.yaml
+// is repo-controlled content and its `files` entries flow unsanitized into the
+// builder pod's filesystem (filepath.Join + os.Stat/upload) and, unescaped,
+// into the APP_FILES comma-separated env var and the uploaded artifact's
+// filename — so path separators and commas are rejected outright, on top of
+// the absolute-path/root-escape check shared with handlers.validateProjectDir.
 func validateFileEntry(name string) error {
 	if name == "" {
 		return fmt.Errorf("filename must not be empty")
 	}
-	if filepath.IsAbs(name) {
-		return fmt.Errorf("%q must be a relative path", name)
+	if name == "metadata.yaml" || name == "requirements.txt" {
+		return fmt.Errorf("%q is a reserved filename and must not be listed in files", name)
 	}
-	cleaned := filepath.Clean(name)
+	if strings.ContainsAny(name, "/\\,") {
+		return fmt.Errorf("%q must be a flat filename with no path separators or commas", name)
+	}
+	return ValidateRelativePath(name, fmt.Sprintf("%q", name))
+}
+
+// ValidateRelativePath rejects an absolute path or any path that would escape
+// its root via "..". label is included as-is in the returned error message
+// (e.g. "project_dir" or a quoted filename) so callers get context-appropriate
+// wording from one shared check.
+func ValidateRelativePath(p, label string) error {
+	if filepath.IsAbs(p) {
+		return fmt.Errorf("%s must be a relative path", label)
+	}
+	cleaned := filepath.Clean(p)
 	if cleaned == ".." || strings.HasPrefix(cleaned, "../") {
-		return fmt.Errorf("%q must not escape the project root", name)
+		return fmt.Errorf("%s must not escape its root directory", label)
 	}
 	return nil
 }

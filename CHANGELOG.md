@@ -13,6 +13,14 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ### Changed
 - **Documentation refresh and consolidation**: README.md, ARCHITECTURE.md, and EXAMPLES.md rewritten to cover everything added since v0.4.0 (app builds, GitWatcher CRD + REST CRUD + watcher binary, bulk-delete/zombie-cleanup, structured logging, `python_version` selection, private-repo token auth, builder-images ConfigMap). `example.md` merged into `EXAMPLES.md`; `flux/README.md` merged into `FLUX.md`; `install.md`/`INSTALL.md` (a stale case-duplicate pair with divergent content, the source of a broken link from README.md) and the `testing.md` redirect stub were deleted, with the essential Helm install/upgrade/uninstall steps folded into README.md
 
+### Fixed
+- **App builds in `"auto"` file-upload mode could silently succeed with zero uploaded entrypoint scripts** if every `.py` file lived in a subdirectory (a layout the builder itself encourages for importable source packages) — `validateAppStructure` now fails fast when auto-discovery finds no top-level `*.py` files, instead of only checking `main.py`/listed-file presence.
+- **`metadata.yaml`'s `files` key accepted values that broke downstream assumptions**: entries containing a comma corrupted the `APP_FILES` env var's comma-separated round-trip into the builder pod; entries containing a path separator produced a nested-path artifact filename inconsistent with the flat-filename convention used elsewhere; the reserved names `metadata.yaml`/`requirements.txt` could be listed, causing a duplicate upload; and duplicate entries in the list were never rejected, also causing a duplicate upload. `internal/gitutil/metadata.go`'s `validateFileEntry` now rejects all of these at metadata-parse time.
+- **`validateAppStructure`'s required-file and listed-file checks used `os.IsNotExist`**, so a non-ENOENT `os.Stat` error (e.g. permission denied) was silently treated as "file present," defeating the documented fail-fast intent; both checks (and the analogous checks in git builds' `validateGitStructure`) now fail on any stat error.
+- **Builder log messages for a missing/failed upload lost their distinguishing context** (e.g. "entrypoint file" vs. a listed file) after the git- and app-build upload paths were unified behind a shared `uploadProjectFile` helper — the helper now takes an explicit file-kind label so failures remain identifiable in build logs (`GET /venvs/:id/logs`).
+- **`validateFileEntry` in `internal/gitutil/metadata.go` duplicated `handlers.validateProjectDir`'s path-traversal check** instead of sharing it — extracted into a single `gitutil.ValidateRelativePath` helper used by both.
+- **CLAUDE.md's "app builds touch 8 layers" gotcha only listed 6** — added the two it omitted (`internal/buildtrigger/trigger.go`, `internal/api/dto/responses.go`).
+
 ## [0.10.0] — 2026-07-22
 
 ### Added

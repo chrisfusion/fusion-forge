@@ -8,8 +8,6 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
-	"path/filepath"
-	"strings"
 
 	"github.com/gin-gonic/gin"
 	"github.com/jackc/pgx/v5"
@@ -363,12 +361,5 @@ func validateProjectDir(p string) error {
 	if p == "" {
 		return nil
 	}
-	if filepath.IsAbs(p) {
-		return fmt.Errorf("project_dir must be a relative path")
-	}
-	cleaned := filepath.Clean(p)
-	if cleaned == ".." || strings.HasPrefix(cleaned, "../") {
-		return fmt.Errorf("project_dir must not escape the repository root")
-	}
-	return nil
+	return gitutil.ValidateRelativePath(p, "project_dir")
 }
