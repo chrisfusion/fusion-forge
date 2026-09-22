@@ -24,6 +24,26 @@ import (
 	"fusion-platform.io/fusion-forge/internal/api/middleware"
 )
 
+const (
+	// labelManagedBy marks who manages a resource. Create handlers default it to "manual" when
+	// the caller didn't set one (e.g. fusion-wizard sends "wizard" explicitly, left untouched).
+	labelManagedBy  = "fusion-platform.io/managed-by"
+	managedByManual = "manual"
+)
+
+// defaultManagedByManual returns labels with labelManagedBy defaulted to "manual" unless the
+// caller already claimed it, so anything created through this API without an explicit owner is
+// clearly marked as hand-managed.
+func defaultManagedByManual(labels map[string]string) map[string]string {
+	if labels == nil {
+		labels = map[string]string{}
+	}
+	if labels[labelManagedBy] == "" {
+		labels[labelManagedBy] = managedByManual
+	}
+	return labels
+}
+
 func internalError(c *gin.Context, err error) {
 	middleware.LoggerFromCtx(c).Error("internal error", "error", err)
 	c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
