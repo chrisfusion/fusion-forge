@@ -163,6 +163,117 @@ func (h *BuildsHandler) ZombieCleanup(c *gin.Context) {
 	c.JSON(http.StatusOK, dto.BulkDeleteResponse{Deleted: deleted, Failed: failed})
 }
 
+// IndexDriftCleanup handles POST /api/v1/builds/index-drift-cleanup.
+// It is the housekeeper for DANGLING-INDEX-ARTIFACT.md: it inspects SUCCESS builds older than
+// older_than and, for each, verifies the recorded fusion-index artifact/version still exists.
+// The normal desync-catching path lives in the GitWatcher reconciler itself (it self-heals
+// opportunistically whenever it reconciles); this endpoint is the backstop for builds whose
+// watcher never reconciles again because the watched repo's HEAD stopped moving, and for
+// requirements-type builds which have no watcher at all. A dangling build's DB row is deleted
+// (its index side is already confirmed gone, so there's nothing to clean up there) and any
+// GitWatcher CR that was relying on it is nudged to rebuild on its next reconcile.
+// At most 1000 builds are inspected per call.
+func (h *BuildsHandler) IndexDriftCleanup(c *gin.Context) {
+	var req dto.IndexDriftCleanupRequest
+	if err := c.ShouldBind(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	if req.OlderThan.IsZero() {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "older_than is required"})
+		return
+	}
+	if req.BuildType != "" && !validBuildTypes[req.BuildType] {
+		c.JSON(http.StatusUnprocessableEntity, gin.H{"error": fmt.Sprintf("unknown build_type %q: accepted values are requirements, git, app", req.BuildType)})
+		return
+	}
+
+	ctx := c.Request.Context()
+	logger := middleware.LoggerFromCtx(c)
+
+	builds, err := h.DB.ListBuildsForDeletion(ctx, []string{"SUCCESS"}, req.OlderThan, req.BuildType)
+	if err != nil {
+		internalError(c, err)
+		return
+	}
+
+	deleted := make([]int64, 0, len(builds))
+	failed := make([]dto.BulkDeleteFailure, 0, len(builds))
+
+	for _, b := range builds {
+		if b.IndexArtifactID == nil || b.IndexArtifactVersion == nil {
+			continue // nothing recorded to verify against
+		}
+		exists, err := h.IndexClient.VersionExists(ctx, *b.IndexArtifactID, *b.IndexArtifactVersion)
+		if err != nil {
+			logger.Warn("index-drift check: verify version", "build_id", b.ID, "artifact_id", *b.IndexArtifactID, "version", *b.IndexArtifactVersion, "error", err)
+			failed = append(failed, dto.BulkDeleteFailure{ID: b.ID, Error: "index: " + err.Error()})
+			continue
+		}
+		if exists {
+			continue // not dangling
+		}
+		if err := h.DB.DeleteVenvBuild(ctx, b.ID); err != nil {
+			logger.Error("delete dangling build row", "build_id", b.ID, "error", err)
+			failed = append(failed, dto.BulkDeleteFailure{ID: b.ID, Error: err.Error()})
+			continue
+		}
+		deleted = append(deleted, b.ID)
+		h.nudgeMatchingWatchers(ctx, logger, b)
+	}
+
+	logger.Info("index-drift cleanup",
+		"inspected", len(builds),
+		"deleted", len(deleted),
+		"failed", len(failed),
+		"older_than", req.OlderThan,
+		"build_type", req.BuildType,
+	)
+	c.JSON(http.StatusOK, dto.BulkDeleteResponse{Deleted: deleted, Failed: failed})
+}
+
+// nudgeMatchingWatchers clears LastSeenCommit/LastBuiltVersion on any GitWatcher CR whose
+// (repoURL, repoRef, lastBuiltVersion) matches the dangling build just removed, so the
+// watcher's own reconcile loop re-evaluates and rebuilds it on its next tick instead of
+// sitting on a stale LastBuiltVersion indefinitely. Best-effort: a watcher isn't guaranteed
+// to exist for every build (e.g. one-off /gitbuilds calls), and failures here don't affect
+// the already-committed row deletion, so they're only logged.
+func (h *BuildsHandler) nudgeMatchingWatchers(ctx context.Context, logger *slog.Logger, b db.VenvBuild) {
+	if b.RepoURL == nil {
+		return
+	}
+	repoRef := ""
+	if b.RepoRef != nil {
+		repoRef = *b.RepoRef
+	}
+
+	var list buildv1alpha1.GitWatcherList
+	if err := h.K8sCRClient.List(ctx, &list, client.InNamespace(h.Cfg.K8sNamespace)); err != nil {
+		logger.Warn("index-drift: list gitwatchers", "error", err)
+		return
+	}
+
+	for i := range list.Items {
+		w := &list.Items[i]
+		wantRef := w.Spec.RepoRef
+		if wantRef == "" {
+			wantRef = "main"
+		}
+		if w.Spec.RepoURL != *b.RepoURL || wantRef != repoRef || w.Status.LastBuiltVersion != b.Version {
+			continue
+		}
+		base := client.MergeFrom(w.DeepCopy())
+		w.Status.LastSeenCommit = ""
+		w.Status.LastBuiltVersion = ""
+		w.Status.Message = fmt.Sprintf("index artifact for version %s vanished — will rebuild on next reconcile", b.Version)
+		if err := h.K8sCRClient.Status().Patch(ctx, w, base); err != nil {
+			logger.Warn("index-drift: reset watcher status", "watcher", w.Name, "error", err)
+			continue
+		}
+		logger.Info("index-drift: reset watcher for rebuild", "watcher", w.Name, "version", b.Version)
+	}
+}
+
 // deleteZombie removes a zombie build: deletes the index version (best-effort) then the DB row.
 func (h *BuildsHandler) deleteZombie(ctx context.Context, logger *slog.Logger, b db.VenvBuild) error {
 	if b.IndexArtifactID != nil && b.IndexArtifactVersion != nil {

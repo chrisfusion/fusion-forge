@@ -99,6 +99,19 @@ type ZombieCleanupRequest struct {
 	BuildType string `json:"build_type"`
 }
 
+// IndexDriftCleanupRequest is the JSON body for POST /api/v1/builds/index-drift-cleanup.
+// older_than is required to avoid re-verifying builds that just succeeded.
+// At most 1000 builds are inspected per call; repeat the call to sweep more.
+type IndexDriftCleanupRequest struct {
+	// OlderThan restricts the sweep to SUCCESS builds whose created_at is before this
+	// RFC3339 timestamp.
+	OlderThan time.Time `json:"older_than"`
+
+	// BuildType restricts the sweep to a specific build type.
+	// Accepted values: "requirements", "git", "app". Empty means all types.
+	BuildType string `json:"build_type"`
+}
+
 // BulkDeleteBuildsRequest is the JSON body for DELETE /api/v1/builds.
 // Both statuses and older_than are required to prevent accidental mass-deletion.
 // At most 1000 matching builds are deleted per call; repeat the call to delete more.

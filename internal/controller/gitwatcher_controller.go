@@ -140,29 +140,32 @@ func (r *GitWatcherReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		return ctrl.Result{RequeueAfter: r.jitteredInterval(watcher.Name)}, nil
 	}
 
-	// Skip if version unchanged since last successful build.
-	if version != "" && version == watcher.Status.LastBuiltVersion {
-		logger.Info("version unchanged — skipping", "watcher", req.Name, "version", version)
-		watcher.Status.Message = fmt.Sprintf("version %s already built — skipping", version)
-		_ = r.Status().Patch(ctx, &watcher, base)
-		return ctrl.Result{RequeueAfter: r.jitteredInterval(watcher.Name)}, nil
-	}
-
-	// Check DB for an existing row with the same (name, version).
+	// Check DB for an existing row with the same (name, version). This is the single source
+	// of truth for "already built" — it also governs the version-unchanged-since-last-build
+	// case, since a SUCCESS row for the same (name, version) implies watcher.Status.LastBuiltVersion
+	// would already equal version. Before trusting a SUCCESS row, verify its fusion-index
+	// artifact/version still resolves; if it's been deleted out from under us (see
+	// DANGLING-INDEX-ARTIFACT.md), drop the stale row and fall through to rebuild instead of
+	// skipping forever.
 	if existing, dbErr := r.DB.GetVenvBuildByNameAndVersion(ctx, name, version); dbErr == nil {
 		switch existing.Status {
 		case "SUCCESS":
-			logger.Info("version already built in DB — skipping", "watcher", req.Name, "version", version)
-			watcher.Status.LastBuiltVersion = version
-			watcher.Status.ConsecutiveFailures = 0
-			_ = r.Status().Patch(ctx, &watcher, base)
-			return ctrl.Result{RequeueAfter: r.jitteredInterval(watcher.Name)}, nil
+			if !r.indexArtifactMissing(ctx, existing.IndexArtifactID, existing.IndexArtifactVersion) {
+				logger.Info("version already built in DB — skipping", "watcher", req.Name, "version", version)
+				watcher.Status.LastBuiltVersion = version
+				watcher.Status.ConsecutiveFailures = 0
+				_ = r.Status().Patch(ctx, &watcher, base)
+				return ctrl.Result{RequeueAfter: r.jitteredInterval(watcher.Name)}, nil
+			}
+			logger.Info("index artifact for successful build is gone — rebuilding", "watcher", req.Name, "version", version)
+			watcher.Status.LastError = fmt.Sprintf("index artifact for version %s vanished — rebuilding", version)
+			r.cleanupStaleRow(ctx, existing)
 		case "PENDING", "BUILDING":
 			logger.Info("version build already in progress in DB", "watcher", req.Name, "version", version)
 			_ = r.Status().Patch(ctx, &watcher, base)
 			return ctrl.Result{RequeueAfter: r.jitteredInterval(watcher.Name)}, nil
 		case "FAILED":
-			r.cleanupFailedRow(ctx, existing)
+			r.cleanupStaleRow(ctx, existing)
 		}
 	} else if !errors.Is(dbErr, pgx.ErrNoRows) {
 		logger.Error(dbErr, "query DB for existing build", "name", name, "version", version)
@@ -296,7 +299,7 @@ func (r *GitWatcherReconciler) checkInFlightBuild(ctx context.Context, watcher *
 	case buildv1alpha1.CIBuildPhaseFailed:
 		base := client.MergeFrom(watcher.DeepCopy())
 		if existing, dbErr := r.DB.GetVenvBuildByCIBuildName(ctx, watcher.Status.LastBuildName); dbErr == nil {
-			r.cleanupFailedRow(ctx, existing)
+			r.cleanupStaleRow(ctx, existing)
 		}
 		failures := watcher.Status.ConsecutiveFailures + 1
 		watcher.Status.ConsecutiveFailures = failures
@@ -372,8 +375,11 @@ func (r *GitWatcherReconciler) resolveVersionAndMeta(
 	}
 }
 
-// cleanupFailedRow deletes the FAILED build row and its orphaned fusion-index version (best-effort).
-func (r *GitWatcherReconciler) cleanupFailedRow(ctx context.Context, existing db.VenvBuild) {
+// cleanupStaleRow deletes a build row that is no longer trustworthy — either it FAILED, or it
+// SUCCEEDED but its fusion-index artifact/version has since disappeared — along with its
+// fusion-index version (best-effort; a not-found response is already treated as success by
+// DeleteVersion, which covers the already-gone case).
+func (r *GitWatcherReconciler) cleanupStaleRow(ctx context.Context, existing db.VenvBuild) {
 	logger := log.FromContext(ctx)
 	if existing.IndexArtifactID != nil && existing.IndexArtifactVersion != nil {
 		if err := r.IndexClient.DeleteVersion(ctx, *existing.IndexArtifactID, *existing.IndexArtifactVersion); err != nil {
@@ -381,8 +387,24 @@ func (r *GitWatcherReconciler) cleanupFailedRow(ctx context.Context, existing db
 		}
 	}
 	if err := r.DB.DeleteVenvBuild(ctx, existing.ID); err != nil {
-		logger.Error(err, "delete failed build row", "buildID", existing.ID)
+		logger.Error(err, "delete stale build row", "buildID", existing.ID)
 	}
+}
+
+// indexArtifactMissing reports whether a build's recorded fusion-index artifact/version no
+// longer resolves. On a lookup error it conservatively returns false (assume present), so a
+// transient fusion-index outage doesn't trigger spurious rebuilds.
+func (r *GitWatcherReconciler) indexArtifactMissing(ctx context.Context, artifactID *int64, version *string) bool {
+	if artifactID == nil || version == nil {
+		return false
+	}
+	logger := log.FromContext(ctx)
+	exists, err := r.IndexClient.VersionExists(ctx, *artifactID, *version)
+	if err != nil {
+		logger.Error(err, "verify index artifact existence", "artifactID", *artifactID, "version", *version)
+		return false
+	}
+	return !exists
 }
 
 // jitteredInterval spreads poll intervals using an FNV hash of the watcher name.

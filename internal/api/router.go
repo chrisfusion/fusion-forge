@@ -114,6 +114,7 @@ func NewRouter(
 
 	v1.DELETE("/builds", bh.BulkDelete)
 	v1.POST("/builds/zombie-cleanup", bh.ZombieCleanup)
+	v1.POST("/builds/index-drift-cleanup", bh.IndexDriftCleanup)
 
 	return r
 }

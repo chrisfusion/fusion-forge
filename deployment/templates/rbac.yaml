@@ -16,7 +16,7 @@ rules:
     verbs: ["create", "get", "list", "watch", "update", "patch", "delete"]
   - apiGroups: ["build.fusion-platform.io"]
     resources: ["gitwatchers/status"]
-    verbs: ["get"]
+    verbs: ["get", "patch"]
   - apiGroups: [""]
     resources: ["configmaps"]
     verbs: ["get"]
