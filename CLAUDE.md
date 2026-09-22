@@ -362,6 +362,7 @@ Short name: `gw` — `kubectl get gw -n fusion`
 - **App project subdirectories need `__init__.py`**: any subdirectory copied into site-packages by the app builder must have an `__init__.py`; without it the package is a namespace package, `pkg.__file__` is `None`, and path resolution in `main.py` crashes at runtime
 - **App `main.py` must use package imports, not filesystem paths**: use `import internals; path = os.path.join(os.path.dirname(internals.__file__), "app.py")` — not `os.path.dirname(__file__)` which resolves to wherever the runner placed `main.py`, not site-packages
 - **Retriggering a build for the same version requires manual fusion-index cleanup**: `DELETE /api/v1/builds` is best-effort on fusion-index; if it leaves the version behind the next trigger returns 409 conflict — delete manually: `curl -X DELETE http://localhost:18081/api/v1/artifacts/{id}/versions/{ver}`
+- Every resource created via `internal/api/handlers` gets `fusion-platform.io/managed-by` defaulted to `manual` unless the caller already set it (e.g. fusion-wizard sends `wizard`) — `defaultManagedByManual` in `helpers.go`, called from `GitWatcherHandler.Create`. `PUT` never touches `ObjectMeta`, so labels set at creation (including this default) survive updates.
 
 ## Migrations
 
@@ -371,6 +372,7 @@ Short name: `gw` — `kubectl get gw -n fusion`
 ## minikube image tags
 
 - `k8s/deployment.yaml` uses `:local` tags — Makefile default is `:latest` so **always** pass `IMG=fusion-forge:local`; building without the flag produces a `:latest` image the pods will not pick up; semver tags (`:0.2.1`) are likewise ignored
+- `minikube image load <name>:<tag>` (by name) can silently keep a stale cached image even though it reports success; `docker save -o x.tar <name>:<tag>` then `minikube image load x.tar` reliably picks up a rebuilt image
 
 ## Changelog
 
