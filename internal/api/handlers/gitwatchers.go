@@ -111,6 +111,7 @@ func (h *GitWatcherHandler) Create(c *gin.Context) {
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      req.Name,
 			Namespace: h.Cfg.K8sNamespace,
+			Labels:    req.Labels,
 		},
 		Spec: buildv1alpha1.GitWatcherSpec{
 			RepoURL:        req.RepoURL,

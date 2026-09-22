@@ -30,6 +30,12 @@ type CreateGitWatcherRequest struct {
 	EntrypointFile string               `json:"entrypoint_file" binding:"max=500"`
 	ProjectDir     string               `json:"project_dir" binding:"max=500"`
 	Description    string               `json:"description" binding:"max=2000"`
+
+	// Labels are applied to the created GitWatcher's ObjectMeta as-is. Callers (e.g. fusion-wizard)
+	// use this to mark ownership (fusion-platform.io/managed-by, wizard.fusion-platform.io/run) so
+	// a bare `kubectl get -o yaml` shows it without querying the caller's own API. Update leaves
+	// ObjectMeta untouched, so labels set here survive later updates.
+	Labels map[string]string `json:"labels"`
 }
 
 // UpdateGitWatcherRequest is the JSON body for PUT /api/v1/gitwatchers/:name.
@@ -88,6 +94,7 @@ type GitWatcherStatusResponse struct {
 type GitWatcherResponse struct {
 	Name      string                   `json:"name"`
 	Namespace string                   `json:"namespace"`
+	Labels    map[string]string        `json:"labels,omitempty"`
 	CreatedAt time.Time                `json:"createdAt"`
 	Spec      GitWatcherSpecResponse   `json:"spec"`
 	Status    GitWatcherStatusResponse `json:"status"`
@@ -141,6 +148,7 @@ func ToGitWatcherResponse(gw buildv1alpha1.GitWatcher) GitWatcherResponse {
 	return GitWatcherResponse{
 		Name:      gw.Name,
 		Namespace: gw.Namespace,
+		Labels:    gw.Labels,
 		CreatedAt: gw.CreationTimestamp.Time,
 		Spec:      spec,
 		Status:    status,
