@@ -10,6 +10,8 @@ NAMESPACE          ?= fusion
         docker-build-builder-py310 \
         install-crds install-rbac deploy undeploy minikube-deploy create-namespace
 
+.PHONY: vendor check-vendor
+
 all: generate build
 
 ## Generate deepcopy functions and CRD YAML manifests.
@@ -17,15 +19,26 @@ generate:
 	$(CONTROLLER_GEN) object:headerFile="" paths="./api/..."
 	$(CONTROLLER_GEN) crd paths="./api/..." output:crd:dir=config/crd/bases
 
+## Refresh vendor/ from go.mod (committed so builds work offline).
+vendor:
+	go mod tidy
+	go mod vendor
+
+## Fail when vendor/ drifted from go.mod/go.sum.
+check-vendor:
+	go mod vendor
+	git diff --exit-code -- vendor go.mod go.sum
+	@test -z "$$(git ls-files --others --exclude-standard -- vendor)" || (echo "untracked files in vendor/" && exit 1)
+
 ## Build all Go binaries.
 build:
-	CGO_ENABLED=0 go build -o bin/server   ./cmd/server/
-	CGO_ENABLED=0 go build -o bin/operator ./cmd/operator/
-	CGO_ENABLED=0 go build -o bin/watcher  ./cmd/watcher/
+	CGO_ENABLED=0 go build -mod=vendor -o bin/server   ./cmd/server/
+	CGO_ENABLED=0 go build -mod=vendor -o bin/operator ./cmd/operator/
+	CGO_ENABLED=0 go build -mod=vendor -o bin/watcher  ./cmd/watcher/
 
 ## Run tests.
 test:
-	go test ./... -v
+	go test -mod=vendor ./... -v
 
 ## Build and load the main image into minikube.
 docker-build:

@@ -5,16 +5,17 @@ FROM golang:1.25-alpine AS builder
 WORKDIR /workspace
 
 COPY go.mod go.sum ./
-RUN go mod download
+# Dependencies are vendored (offline builds): no `go mod download`.
+COPY vendor/ vendor/
 
 COPY api/    api/
 COPY cmd/    cmd/
 COPY internal/ internal/
 COPY migrations/ migrations/
 
-RUN CGO_ENABLED=0 GOOS=linux go build -a -o server  ./cmd/server/
-RUN CGO_ENABLED=0 GOOS=linux go build -a -o operator ./cmd/operator/
-RUN CGO_ENABLED=0 GOOS=linux go build -a -o watcher ./cmd/watcher/
+RUN CGO_ENABLED=0 GOOS=linux go build -mod=vendor -a -o server  ./cmd/server/
+RUN CGO_ENABLED=0 GOOS=linux go build -mod=vendor -a -o operator ./cmd/operator/
+RUN CGO_ENABLED=0 GOOS=linux go build -mod=vendor -a -o watcher ./cmd/watcher/
 
 # Runtime stage: minimal distroless image.
 FROM gcr.io/distroless/static:nonroot
