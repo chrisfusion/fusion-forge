@@ -398,3 +398,7 @@ require-exact-pinning: true   # true = only == accepted
 banned-packages: []
 max-packages: 100
 ```
+
+## Multi-tenancy / ownership
+
+Cross-project plan (owner groups, trusted headers `X-User-Groups` etc., migration, rollout): `../fusion-shared/docs/multi-tenancy.md` — read it before touching ownership, groups or the `X-User-*` headers.
