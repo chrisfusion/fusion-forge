@@ -27,7 +27,10 @@ type AppMetadata struct {
 	// Files is the explicit whitelist of filenames; only meaningful when
 	// FileUploadMode == "list".
 	Files []string
-	Raw   []byte // original YAML bytes uploaded as-is to fusion-index
+	// RootAssets is true when metadata.yaml sets `rootAssets: true`: the builder then
+	// bundles non-.py root files into a synthetic package (opt-in).
+	RootAssets bool
+	Raw        []byte // original YAML bytes uploaded as-is to fusion-index
 }
 
 type appMetadataYAML struct {
@@ -39,7 +42,8 @@ type appMetadataYAML struct {
 	// Files is nil when the key is absent from metadata.yaml (legacy mode), a non-nil
 	// empty slice when explicitly set to `files: []` (auto-discover mode), or populated
 	// (list mode). This nil-vs-empty distinction is deliberate — see FileUploadMode.
-	Files []string `yaml:"files"`
+	Files      []string `yaml:"files"`
+	RootAssets bool     `yaml:"rootAssets"`
 }
 
 // FetchAppMetadata does a depth-1 in-memory clone of repoURL at the given ref
@@ -116,6 +120,7 @@ func parseAppMetadata(content string) (AppMetadata, error) {
 		Runner:           runnerType(m.Runner),
 		FileUploadMode:   fileUploadMode(m.Files),
 		Files:            m.Files,
+		RootAssets:       m.RootAssets,
 		Raw:              []byte(content),
 	}, nil
 }

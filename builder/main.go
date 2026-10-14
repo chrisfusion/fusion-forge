@@ -43,6 +43,10 @@
 //	                        project; "list" uploads exactly the files named in APP_FILES.
 //	APP_FILES               Comma-separated filenames to upload. Only read when
 //	                        APP_FILE_UPLOAD_MODE=list.
+//	APP_ROOT_ASSETS_PACKAGE Optional: when set, every non-.py regular file in the project root
+//	                        (except requirements.txt, metadata.yaml and dotfiles) is copied into
+//	                        a synthetic package of this name inside site-packages. Must be a valid
+//	                        Python identifier. Set by the operator for apps with `rootAssets: true`.
 //	GIT_TOKEN               Optional: same as for BUILD_TYPE=git.
 package main
 
@@ -59,6 +63,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"time"
 )
@@ -377,6 +382,11 @@ func buildFromApp(ctx context.Context, uploadURL, archiveName, archivePath strin
 		run("cp", "-r", filepath.Join(projectRoot, e.Name()), filepath.Join(sitePackages, e.Name()))
 	}
 
+	// Step 6b: bundle root-level asset files (images etc.) into a synthetic package.
+	if pkg := envDefault("APP_ROOT_ASSETS_PACKAGE", ""); pkg != "" {
+		copyRootAssets(projectRoot, sitePackages, pkg, entries)
+	}
+
 	// Step 7: archive and upload the venv (source is now inside site-packages).
 	archiveAndUpload(ctx, uploadURL, archiveName, archivePath)
 
@@ -397,6 +407,45 @@ func buildFromApp(ctx context.Context, uploadURL, archiveName, archivePath strin
 
 	// Step 9: upload metadata.yaml.
 	uploadProjectFile(ctx, uploadURL, projectRoot, "metadata.yaml", "metadata.yaml")
+}
+
+// pythonIdentifier matches a valid Python package name.
+var pythonIdentifier = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)
+
+// copyRootAssets copies every non-.py regular file directly in projectRoot into
+// <sitePackages>/<pkg>/ and adds an empty __init__.py, so the files are reachable
+// at runtime via os.path.dirname(<pkg>.__file__). requirements.txt, metadata.yaml,
+// dotfiles, directories (already copied as packages) and symlinks (repo-controlled,
+// could point outside the checkout) are skipped. Fails the build on an invalid
+// package name or a collision with an existing package/module in site-packages.
+func copyRootAssets(projectRoot, sitePackages, pkg string, entries []os.DirEntry) {
+	if !pythonIdentifier.MatchString(pkg) {
+		log.Fatalf("[forge-builder] root assets package %q is not a valid Python identifier", pkg)
+	}
+	dest := filepath.Join(sitePackages, pkg)
+	if _, err := os.Stat(dest); err == nil {
+		log.Fatalf("[forge-builder] root assets package %q collides with an existing package in site-packages (project directory or installed dependency)", pkg)
+	}
+	if _, err := os.Stat(dest + ".py"); err == nil {
+		log.Fatalf("[forge-builder] root assets package %q collides with an existing module in site-packages", pkg)
+	}
+	if err := os.MkdirAll(dest, 0o755); err != nil {
+		log.Fatalf("[forge-builder] create root assets package: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(dest, "__init__.py"), nil, 0o644); err != nil {
+		log.Fatalf("[forge-builder] write %s/__init__.py: %v", pkg, err)
+	}
+	count := 0
+	for _, e := range entries {
+		name := e.Name()
+		if !e.Type().IsRegular() || strings.HasPrefix(name, ".") || strings.HasSuffix(name, ".py") ||
+			name == "requirements.txt" || name == "metadata.yaml" {
+			continue
+		}
+		run("cp", filepath.Join(projectRoot, name), filepath.Join(dest, name))
+		count++
+	}
+	log.Printf("[forge-builder] copied %d root asset file(s) into package %s", count, pkg)
 }
 
 // uploadProjectFile stats and uploads a single file relative to projectRoot,

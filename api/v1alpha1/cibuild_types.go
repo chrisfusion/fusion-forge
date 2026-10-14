@@ -51,6 +51,14 @@ type AppSourceSpec struct {
 	// +optional
 	Files []string `json:"files,omitempty"`
 
+	// RootAssets, when true, makes the builder copy every non-.py regular file in
+	// the project root (except requirements.txt, metadata.yaml and dotfiles) into
+	// a synthetic package inside site-packages. The package name is a
+	// deployment-time setting of the operator (BUILDER_ROOT_ASSETS_PACKAGE).
+	// Derived from metadata.yaml's `rootAssets` key.
+	// +optional
+	RootAssets bool `json:"rootAssets,omitempty"`
+
 	// TokenSecretRef, when set, references a Secret+key used to authenticate the
 	// builder Job's git clone of a private repository. Never inlined as a
 	// literal value on this spec — resolved by the kubelet via the builder

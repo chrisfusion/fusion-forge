@@ -60,6 +60,10 @@ type Config struct {
 	BuilderPodRunAsUser      int64  // 0 = not set
 	BuilderPodSeccompProfile string // "" = not set; e.g. "RuntimeDefault"
 
+	// Name of the synthetic package that receives root-level asset files of app
+	// builds opting in via `rootAssets: true` in metadata.yaml.
+	BuilderRootAssetsPackage string
+
 	// Logging
 	LogLevel  string // "debug" | "info" | "warn" | "error"
 	LogFormat string // "json" | "text"
@@ -95,6 +99,7 @@ func Load() *Config {
 		BuilderPodRunAsNonRoot:   getEnv("BUILDER_POD_RUN_AS_NON_ROOT", "true") == "true",
 		BuilderPodRunAsUser:      parseInt64Env("BUILDER_POD_RUN_AS_USER", 1000),
 		BuilderPodSeccompProfile: getEnv("BUILDER_POD_SECCOMP_PROFILE", "RuntimeDefault"),
+		BuilderRootAssetsPackage: getEnv("BUILDER_ROOT_ASSETS_PACKAGE", "_root_assets"),
 		LogLevel:                 getEnv("LOG_LEVEL", "info"),
 		LogFormat:                getEnv("LOG_FORMAT", "json"),
 		WatcherPollInterval:      parseInt64Env("WATCHER_POLL_INTERVAL", 60),

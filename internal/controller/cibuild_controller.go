@@ -43,6 +43,7 @@ type CIBuildReconciler struct {
 	PodRunAsNonRoot  bool
 	PodRunAsUser     int64
 	PodSeccompProfile string
+	RootAssetsPackage string
 }
 
 // +kubebuilder:rbac:groups=build.fusion-platform.io,resources=cibuilds,verbs=get;list;watch;create;update;patch;delete
@@ -153,6 +154,7 @@ func (r *CIBuildReconciler) ensureJob(ctx context.Context, owner *buildv1alpha1.
 		PodRunAsNonRoot:   r.PodRunAsNonRoot,
 		PodRunAsUser:      r.PodRunAsUser,
 		PodSeccompProfile: r.PodSeccompProfile,
+		RootAssetsPackage: r.RootAssetsPackage,
 	}
 	job := jobbuilder.BuildJob(owner, cmName, opts)
 	if err := ctrl.SetControllerReference(owner, job, r.Scheme); err != nil {

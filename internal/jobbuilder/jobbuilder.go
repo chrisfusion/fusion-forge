@@ -34,6 +34,10 @@ type BuildOptions struct {
 	PodRunAsNonRoot   bool
 	PodRunAsUser      int64  // 0 = not set
 	PodSeccompProfile string // "" = not set; e.g. "RuntimeDefault"
+
+	// RootAssetsPackage is the synthetic package name injected as APP_ROOT_ASSETS_PACKAGE
+	// for app builds with AppSource.RootAssets set.
+	RootAssetsPackage string
 }
 
 // mergeWithSystemWin merges extra into system, with system entries always taking priority.
@@ -172,6 +176,9 @@ func BuildJob(ciBuild *buildv1alpha1.CIBuild, configMapName string, opts BuildOp
 		)
 		if as.FileUploadMode == "list" {
 			baseEnv = append(baseEnv, corev1.EnvVar{Name: "APP_FILES", Value: strings.Join(as.Files, ",")})
+		}
+		if as.RootAssets {
+			baseEnv = append(baseEnv, corev1.EnvVar{Name: "APP_ROOT_ASSETS_PACKAGE", Value: opts.RootAssetsPackage})
 		}
 		if tokenEnvVar, ok := gitTokenEnvVar(as.TokenSecretRef); ok {
 			baseEnv = append(baseEnv, tokenEnvVar)

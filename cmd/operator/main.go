@@ -77,6 +77,7 @@ func main() {
 		PodRunAsNonRoot:   cfg.BuilderPodRunAsNonRoot,
 		PodRunAsUser:      cfg.BuilderPodRunAsUser,
 		PodSeccompProfile: cfg.BuilderPodSeccompProfile,
+		RootAssetsPackage: cfg.BuilderRootAssetsPackage,
 	}).SetupWithManager(mgr); err != nil {
 		logger.Error(err, "unable to set up CIBuild controller")
 		os.Exit(1)

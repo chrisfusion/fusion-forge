@@ -330,6 +330,16 @@ Filenames are validated the same way as `project_dir` — absolute paths and `..
 
 Do not put a per-consumer entrypoint selector under `runner.args` on an artifact meant for multiple different entrypoints — `runner.args` keys are injected as env vars unconditionally by downstream consumers and will silently win over any per-step override. Omit `runner` entirely (or set only `runner.type`, without `args`) for this shape. See `../fusion-testcases/testcases_v2/venv-builds/etl-pipeline/EXPLANATION.md` for the mechanism this avoids (documented there against fusion-weave's `codesource.EnvVars`), and `../fusion-testcases/testcases_v2/app-builds/` for the single-entrypoint `runner.args.ENTRYPOINT` pattern this complements.
 
+#### Assets (images etc.)
+
+- **In a subdirectory** — put them in e.g. `assets/` with an `__init__.py`. Every project subdirectory is copied into the venv's `site-packages`, so `import assets; os.path.join(os.path.dirname(assets.__file__), "logo.png")` finds them.
+- **At the project root** — add `rootAssets: true` to `metadata.yaml`. Every non-`.py` file in the root (except `requirements.txt`, `metadata.yaml`, dotfiles, symlinks) is bundled into a synthetic package named `_root_assets` by default (Helm: `operator.config.builderRootAssetsPackage`):
+  ```python
+  import os, _root_assets
+  logo = os.path.join(os.path.dirname(_root_assets.__file__), "logo.png")
+  ```
+  The build fails if a project directory or dependency already uses that package name. Root `.py` files are unaffected (see `files` above).
+
 ### Validate
 
 ```bash

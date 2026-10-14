@@ -94,6 +94,14 @@ spec:
                     description: ProjectDir is an optional relative path to the app
                       project within the repository.
                     type: string
+                  rootAssets:
+                    description: |-
+                      RootAssets, when true, makes the builder copy every non-.py regular file in
+                      the project root (except requirements.txt, metadata.yaml and dotfiles) into
+                      a synthetic package inside site-packages. The package name is a
+                      deployment-time setting of the operator (BUILDER_ROOT_ASSETS_PACKAGE).
+                      Derived from metadata.yaml's `rootAssets` key.
+                    type: boolean
                   ref:
                     description: Ref is the branch or tag to check out. Defaults to
                       "main".

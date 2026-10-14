@@ -105,6 +105,13 @@ spec:
             - name: BUILDER_POD_ANNOTATIONS
               value: {{ include "fusion-forge.mapToKeyValueCSV" . | quote }}
             {{- end }}
+            {{- with .Values.operator.config.builderRootAssetsPackage }}
+            {{- if not (regexMatch "^[A-Za-z_][A-Za-z0-9_]*$" .) }}
+            {{- fail (printf "operator.config.builderRootAssetsPackage %q must be a valid Python identifier" .) }}
+            {{- end }}
+            - name: BUILDER_ROOT_ASSETS_PACKAGE
+              value: {{ . | quote }}
+            {{- end }}
             {{- with .Values.operator.config.builderPodSecurityContext }}
             - name: BUILDER_POD_RUN_AS_NON_ROOT
               value: {{ .runAsNonRoot | quote }}
