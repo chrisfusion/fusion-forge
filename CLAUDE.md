@@ -291,6 +291,9 @@ Short name: `gw` — `kubectl get gw -n fusion`
 
 ## Gotchas
 
+- **Local `go` is 1.22 but `go.mod` needs 1.25**: use `GOTOOLCHAIN=auto` (cached toolchain), or run tests in Docker: `docker run --rm --network none -v "$PWD":/src -w /src golang:1.25 go test -mod=vendor -race ./...`
+- **`make generate` also rewrites `build.fusion-platform.io_cibuilds.yaml`** (field order and line wrapping drift, no semantic change). Revert it when it isn't part of your change
+- **No fake k8s client is vendored**: keep reconciler logic you want to unit-test free of `client.Client` (e.g. `syncAutoTag` takes a `tagSetter` interface and only changes the in-memory object)
 - **Canonical docs are README.md, ARCHITECTURE.md, EXAMPLES.md, FLUX.md, CHANGELOG.md**: `install.md`/`INSTALL.md` (a stale case-duplicate pair), `example.md`, `testing.md`, and `flux/README.md` were deleted/merged into these on 2026-07-24 — don't recreate them or link to them
 - **Helm release name is `fusion-forge` in namespace `fusion`**: use `helm upgrade fusion-forge deployment/ -n fusion` for all updates; `k8s/deployment.yaml` is kept as reference only and is NOT the live deployment
 - **StatefulSet deletion preserves the PVC**: `data-fusion-forge-postgresql-0` survives `kubectl delete statefulset` — safe to delete and reinstall without losing DB data
