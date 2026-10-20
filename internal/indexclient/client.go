@@ -65,6 +65,10 @@ type versionListResponse struct {
 	Items []versionResponse `json:"items"`
 }
 
+type assignTagRequest struct {
+	Version string `json:"version"`
+}
+
 // --- API methods --------------------------------------------------------------
 
 // FindArtifact looks up an artifact by full_name. Returns (id, true, nil) when found,
@@ -201,6 +205,12 @@ func (c *Client) DeleteVersion(ctx context.Context, artifactID int64, semver str
 	return fmt.Errorf("delete version returned %d: %s", resp.StatusCode, string(b))
 }
 
+// SetTag points tag at the given version of artifactID, creating the tag or moving it.
+func (c *Client) SetTag(ctx context.Context, artifactID int64, tag, semver string) error {
+	reqURL := fmt.Sprintf("%s/api/v1/artifacts/%d/tags/%s", c.baseURL, artifactID, url.PathEscape(tag))
+	return c.sendJSON(ctx, http.MethodPut, reqURL, assignTagRequest{Version: semver}, nil)
+}
+
 // --- Helpers ------------------------------------------------------------------
 
 func (c *Client) getJSON(ctx context.Context, rawURL string, out interface{}) error {
@@ -222,11 +232,15 @@ func (c *Client) getJSON(ctx context.Context, rawURL string, out interface{}) er
 }
 
 func (c *Client) postJSON(ctx context.Context, rawURL string, in, out interface{}) error {
+	return c.sendJSON(ctx, http.MethodPost, rawURL, in, out)
+}
+
+func (c *Client) sendJSON(ctx context.Context, method, rawURL string, in, out interface{}) error {
 	data, err := json.Marshal(in)
 	if err != nil {
 		return err
 	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, rawURL, bytes.NewReader(data))
+	req, err := http.NewRequestWithContext(ctx, method, rawURL, bytes.NewReader(data))
 	if err != nil {
 		return err
 	}
@@ -240,7 +254,7 @@ func (c *Client) postJSON(ctx context.Context, rawURL string, in, out interface{
 
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		b, _ := io.ReadAll(resp.Body)
-		return fmt.Errorf("POST %s returned %d: %s", rawURL, resp.StatusCode, string(b))
+		return fmt.Errorf("%s %s returned %d: %s", method, rawURL, resp.StatusCode, string(b))
 	}
 	if out != nil {
 		return json.NewDecoder(resp.Body).Decode(out)

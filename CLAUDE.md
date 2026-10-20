@@ -212,6 +212,7 @@ spec:
   entrypointFile: ""             # optional; ignored for app builds
   projectDir: ""                 # optional monorepo subdirectory
   description: ""
+  autoTag: ""                    # optional fusion-index tag (e.g. "stable") moved to every built version; empty = manual
   tokenSecretRef:                # optional — for private repos
     name: my-repo-token
     key: token
@@ -225,6 +226,8 @@ status:
   lastCheckedAt: "2026-05-21T13:51:44Z"
   lastError: ""
   message: ""
+  artifactID: 42                # fusion-index artifact of lastBuiltVersion (for autoTag)
+  lastAutoTag: "stable:1.2.0"   # "<tag>:<version>" autoTag last pointed at
 ```
 
 Short name: `gw` — `kubectl get gw -n fusion`
@@ -268,8 +271,9 @@ Short name: `gw` — `kubectl get gw -n fusion`
 2. Phase=Disabled → sleep 10× pollInterval (until manually re-enabled)
 3. In-flight build check (`LastBuildName != ""`): read CIBuild CR
    - Pending/Building → requeue after jittered interval
-   - Succeeded → set `LastBuiltVersion = LastBuildVersion`, reset `ConsecutiveFailures`, clear `LastBuildName`; requeue
+   - Succeeded → set `LastBuiltVersion = LastBuildVersion` and `ArtifactID` (from the DB row), clear `LastAutoTag`, reset `ConsecutiveFailures`, clear `LastBuildName`; continue
    - Failed → `GetVenvBuildByCIBuildName` → `cleanupFailedRow` (DeleteVersion from fusion-index + DeleteVenvBuild from DB); increment `ConsecutiveFailures`; clear `LastSeenCommit` (forces fresh poll/retry); if failures ≥ MaxFailures → Phase=Disabled; requeue
+   - then `syncAutoTag`: if `autoTag` is set and `LastAutoTag != "<autoTag>:<LastBuiltVersion>"`, `PUT` the tag in fusion-index (own status patch; a failure lands in `LastError` and is retried next reconcile)
 4. Resolve token from K8s Secret (`TokenSecretRef`) if set
 5. `FetchRemoteHEAD(repoURL, repoRef, token)` — cheap ls-refs, no clone
 6. HEAD == `LastSeenCommit` → update `LastCheckedAt`, requeue
@@ -335,7 +339,8 @@ Short name: `gw` — `kubectl get gw -n fusion`
 - **`make docker-build` now rebuilds all three binaries**: server, operator, and watcher are all compiled in one `docker build`; restart all three deployments after rebuild with `kubectl rollout restart deployment/fusion-forge-server deployment/fusion-forge-operator deployment/fusion-forge-watcher -n fusion`
 - **GitWatcher CRD must be applied before `helm upgrade`**: the CRD is not managed by Helm (to avoid field-manager conflicts); apply it manually with `kubectl apply -f config/crd/bases/build.fusion-platform.io_gitwatchers.yaml` first
 - **Watcher uses logr/zap, not slog**: `cmd/watcher/main.go` follows the operator pattern (`ctrl.SetLogger(zap.New(...))`, `log.FromContext(ctx)`) — do not mix slog into the watcher or controller
-- **GitWatcher reconciler has at most two status patches per reconcile cycle**: the in-flight check is its own return path; the poll+trigger path does one final patch — never chain multiple `r.Status().Patch()` calls in a single reconcile without re-capturing `base` from the current watcher state
+- **GitWatcher reconciler has at most three status patches per reconcile cycle**: the in-flight check, `syncAutoTag` (only when it changed something) and the poll+trigger path's final patch — each re-captures its own `base`; never chain multiple `r.Status().Patch()` calls in a single reconcile without re-capturing `base` from the current watcher state
+- **`autoTag` follows the declared version, not the highest one**: reverting `metadata.yaml`/`pyproject.toml` to an already-built version moves the tag back (the "already built" paths set `LastBuiltVersion` too). It is opt-in (empty = tags are moved by hand); fusion-wizard sets it on the watchers it creates. `syncAutoTag` takes a `tagSetter` interface and touches no k8s client, so it is unit-tested without a fake client (none is vendored)
 - **`cleanupFailedRow` is best-effort**: `DeleteVersion` from fusion-index and `DeleteVenvBuild` from the DB are both attempted but errors are only logged — the next trigger attempt will detect the conflict and return `ErrConflict` (treated as "skipped") which is safe
 - **Token auth for private repos**: `spec.tokenSecretRef` references a K8s Secret in the same namespace, used for both the watcher's own metadata pre-fetch (`FetchAppMetadata`/`FetchPyprojectMeta`) *and* the builder Job's git clone (via `AppSource`/`GitSource.tokenSecretRef` → `jobbuilder`-injected `GIT_TOKEN` env var → a git credential helper in `builder/main.go`, username fixed to `oauth2`) — both legs must work for a private repo to actually build, not just the watcher's read. The watcher reads the Secret via `r.Get` using `mgr.GetClient()`, which is the manager's **cached** client — `cmd/watcher/main.go` explicitly excludes `corev1.Secret` from that cache (`ctrl.Options.Client.Cache.DisableFor`), so the watcher SA only needs `secrets: get` (already in the Helm RBAC Role); without that cache exclusion, `r.Get` on a cached type requires `list`/`watch` too (informer setup), which the Role deliberately does not grant.
 - **`buildtrigger` package is the shared trigger path**: both the REST handlers and the watcher call `TriggerGitBuild` / `TriggerAppBuild` — do not duplicate this logic; `ErrConflict` is the sentinel for 409-class conditions in both callers

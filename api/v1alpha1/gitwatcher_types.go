@@ -82,6 +82,14 @@ type GitWatcherSpec struct {
 	// Description is a human-readable description of the artifact.
 	// +optional
 	Description string `json:"description,omitempty"`
+
+	// AutoTag, when set, is a fusion-index tag (e.g. "stable") the reconciler points at every
+	// version this watcher builds successfully, so consumers resolving the tag pick up the new
+	// build without a manual tag move. It follows the version the repository declares, so a
+	// reverted version moves the tag back. Empty (the default) leaves tags to the user.
+	// +kubebuilder:validation:MaxLength=255
+	// +optional
+	AutoTag string `json:"autoTag,omitempty"`
 }
 
 // GitWatcherStatus reflects the observed state of a GitWatcher.
@@ -124,6 +132,15 @@ type GitWatcherStatus struct {
 	// Message is a human-readable status summary.
 	// +optional
 	Message string `json:"message,omitempty"`
+
+	// ArtifactID is the fusion-index artifact ID of LastBuiltVersion.
+	// +optional
+	ArtifactID int64 `json:"artifactID,omitempty"`
+
+	// LastAutoTag is the "<tag>:<version>" Spec.AutoTag was last pointed at. Cleared after
+	// each new build so a rebuilt version gets its tag back.
+	// +optional
+	LastAutoTag string `json:"lastAutoTag,omitempty"`
 }
 
 // +kubebuilder:object:root=true

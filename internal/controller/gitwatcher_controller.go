@@ -90,6 +90,15 @@ func (r *GitWatcherReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		// Failed case clears LastBuildName and falls through to retry.
 	}
 
+	// --- Point Spec.AutoTag at the last built version (retried every poll until it lands) ---
+	autoTagBase := client.MergeFrom(watcher.DeepCopy())
+	if syncAutoTag(ctx, r.IndexClient, &watcher) {
+		if err := r.Status().Patch(ctx, &watcher, autoTagBase); err != nil {
+			logger.Error(err, "patch status after auto-tag")
+			return ctrl.Result{}, err
+		}
+	}
+
 	// --- Resolve token ---
 	token, err := r.resolveToken(ctx, &watcher)
 	if err != nil {
@@ -154,6 +163,10 @@ func (r *GitWatcherReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 				logger.Info("version already built in DB — skipping", "watcher", req.Name, "version", version)
 				watcher.Status.LastBuiltVersion = version
 				watcher.Status.ConsecutiveFailures = 0
+				if existing.IndexArtifactID != nil {
+					watcher.Status.ArtifactID = *existing.IndexArtifactID
+				}
+				syncAutoTag(ctx, r.IndexClient, &watcher)
 				_ = r.Status().Patch(ctx, &watcher, base)
 				return ctrl.Result{RequeueAfter: r.jitteredInterval(watcher.Name)}, nil
 			}
@@ -240,6 +253,12 @@ func (r *GitWatcherReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 			logger.Info("version already exists — skipping", "watcher", req.Name, "version", version)
 			watcher.Status.LastBuiltVersion = version
 			watcher.Status.Message = fmt.Sprintf("version %s already exists — skipped", version)
+			if id, found, findErr := r.IndexClient.FindArtifact(ctx, artifactFullName(watcher.Spec.BuildType, name)); findErr != nil {
+				logger.Error(findErr, "find index artifact", "watcher", req.Name, "name", name)
+			} else if found {
+				watcher.Status.ArtifactID = id
+			}
+			syncAutoTag(ctx, r.IndexClient, &watcher)
 		} else {
 			logger.Error(triggerErr, "trigger build", "watcher", req.Name, "version", version)
 			failures := watcher.Status.ConsecutiveFailures + 1
@@ -285,6 +304,13 @@ func (r *GitWatcherReconciler) checkInFlightBuild(ctx context.Context, watcher *
 	case buildv1alpha1.CIBuildPhaseSucceeded:
 		base := client.MergeFrom(watcher.DeepCopy())
 		built := watcher.Status.LastBuildVersion
+		if row, dbErr := r.DB.GetVenvBuildByCIBuildName(ctx, watcher.Status.LastBuildName); dbErr != nil {
+			logger.Error(dbErr, "get build row for auto-tag", "ciBuildName", watcher.Status.LastBuildName)
+		} else if row.IndexArtifactID != nil {
+			watcher.Status.ArtifactID = *row.IndexArtifactID
+		}
+		// A rebuilt version lost its tag together with the deleted version, so re-apply it.
+		watcher.Status.LastAutoTag = ""
 		watcher.Status.LastBuiltVersion = built
 		watcher.Status.ConsecutiveFailures = 0
 		watcher.Status.LastBuildName = ""
@@ -405,6 +431,46 @@ func (r *GitWatcherReconciler) indexArtifactMissing(ctx context.Context, artifac
 		return false
 	}
 	return !exists
+}
+
+// tagSetter is the part of indexclient.Client that syncAutoTag needs.
+type tagSetter interface {
+	SetTag(ctx context.Context, artifactID int64, tag, version string) error
+}
+
+// syncAutoTag points Spec.AutoTag at Status.LastBuiltVersion unless Status.LastAutoTag says it
+// already does. It only changes the in-memory watcher (the caller writes the status) and
+// reports whether it did. A failed tag call is recorded in LastError and retried on the next
+// reconcile.
+func syncAutoTag(ctx context.Context, idx tagSetter, watcher *buildv1alpha1.GitWatcher) bool {
+	tag, version, artifactID := watcher.Spec.AutoTag, watcher.Status.LastBuiltVersion, watcher.Status.ArtifactID
+	if tag == "" || version == "" || artifactID == 0 {
+		return false
+	}
+	applied := tag + ":" + version
+	if watcher.Status.LastAutoTag == applied {
+		return false
+	}
+	if err := idx.SetTag(ctx, artifactID, tag, version); err != nil {
+		log.FromContext(ctx).Error(err, "auto-tag", "watcher", watcher.Name, "tag", tag, "version", version)
+		msg := fmt.Sprintf("auto-tag %s failed: %s", applied, err)
+		if watcher.Status.LastError == msg {
+			return false
+		}
+		watcher.Status.LastError = msg
+		return true
+	}
+	watcher.Status.LastAutoTag = applied
+	watcher.Status.Message = fmt.Sprintf("tag %s points at version %s", tag, version)
+	return true
+}
+
+// artifactFullName returns the fusion-index full_name a build of buildType publishes name under.
+func artifactFullName(buildType, name string) string {
+	if buildType == "app" {
+		return indexclient.AppArtifactFullName(name)
+	}
+	return indexclient.ArtifactFullName(name)
 }
 
 // jitteredInterval spreads poll intervals using an FNV hash of the watcher name.

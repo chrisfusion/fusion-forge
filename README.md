@@ -11,7 +11,7 @@ fusion-forge accepts a `requirements.txt`, a Git repository (library or Streamli
 - **Requirements builds** (`/api/v1/venvs`) — upload a `requirements.txt`; forge validates, builds, and registers a pinned venv
 - **Git builds** (`/api/v1/gitbuilds`) — point at any Git repository; forge clones, builds a wheel from `pyproject.toml`, and installs it
 - **App builds** (`/api/v1/appbuilds`) — point at a repository containing `metadata.yaml` + `requirements.txt` + `main.py`; forge builds a venv, optionally layered on a base venvpack, and uploads the venv archive, entrypoint, and metadata together
-- **GitOps watcher** — register a `GitWatcher` CR (or via `/api/v1/gitwatchers`) to poll a repository and auto-trigger a git or app build whenever a new version is published
+- **GitOps watcher** — register a `GitWatcher` CR (or via `/api/v1/gitwatchers`) to poll a repository and auto-trigger a git or app build whenever a new version is published; optional `auto_tag` (e.g. `stable`) moves that fusion-index tag to every newly built version
 - **Monorepo support** — optional `project_dir` field targets a subdirectory within a repository
 - **Metadata auto-detection** — server-side `pyproject.toml` parsing extracts `name` and/or `version` before a git build starts (`metadata_source`: `manual` / `version` / `full`)
 - **Python version selection** — `python_version` chooses the builder image for requirements and git builds (`3.10` / `3.12`, default `3.12`)

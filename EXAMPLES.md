@@ -460,6 +460,24 @@ curl -s -X POST $BASE/api/v1/gitwatchers \
   }' | jq .
 ```
 
+### Create — move a tag to every new build (`auto_tag`)
+
+With `auto_tag` set, the watcher points that fusion-index tag at each version it builds, so consumers resolving the tag (weave's `codeSource`, `WeaveApp`) pick up the new build without a manual tag move. The tag follows the version the repo declares, so reverting `metadata.yaml` to an older, already-built version moves the tag back. Omit it (the default) to keep moving tags by hand. `PUT` replaces the whole spec, so leaving `auto_tag` out of a `PUT` turns it off.
+
+```bash
+curl -s -X POST $BASE/api/v1/gitwatchers \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "dashboard",
+    "repo_url": "https://gitea.internal/team/dashboard.git",
+    "build_type": "app",
+    "auto_tag": "stable"
+  }' | jq .
+
+# status.lastAutoTag shows what was applied, e.g. "stable:1.3.0"
+curl -s $BASE/api/v1/gitwatchers/dashboard | jq '.status | {lastBuiltVersion, artifactID, lastAutoTag, lastError}'
+```
+
 ### List / get
 
 ```bash

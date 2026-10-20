@@ -125,6 +125,7 @@ func (h *GitWatcherHandler) Create(c *gin.Context) {
 			EntrypointFile: req.EntrypointFile,
 			ProjectDir:     req.ProjectDir,
 			Description:    req.Description,
+			AutoTag:        req.AutoTag,
 		},
 	}
 	if req.TokenSecretRef != nil {
@@ -228,6 +229,7 @@ func (h *GitWatcherHandler) Update(c *gin.Context) {
 		EntrypointFile: req.EntrypointFile,
 		ProjectDir:     req.ProjectDir,
 		Description:    req.Description,
+		AutoTag:        req.AutoTag,
 	}
 	if req.TokenSecretRef != nil {
 		gw.Spec.TokenSecretRef = &buildv1alpha1.SecretKeyRef{

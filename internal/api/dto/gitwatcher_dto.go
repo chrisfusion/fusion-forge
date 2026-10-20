@@ -30,6 +30,8 @@ type CreateGitWatcherRequest struct {
 	EntrypointFile string               `json:"entrypoint_file" binding:"max=500"`
 	ProjectDir     string               `json:"project_dir" binding:"max=500"`
 	Description    string               `json:"description" binding:"max=2000"`
+	// AutoTag, when set, is the fusion-index tag moved to every newly built version.
+	AutoTag string `json:"auto_tag" binding:"max=255"`
 
 	// Labels are applied to the created GitWatcher's ObjectMeta as-is. Callers (e.g. fusion-wizard)
 	// use this to mark ownership (fusion-platform.io/managed-by, wizard.fusion-platform.io/run) so
@@ -53,6 +55,8 @@ type UpdateGitWatcherRequest struct {
 	EntrypointFile string               `json:"entrypoint_file" binding:"max=500"`
 	ProjectDir     string               `json:"project_dir" binding:"max=500"`
 	Description    string               `json:"description" binding:"max=2000"`
+	// AutoTag, when set, is the fusion-index tag moved to every newly built version.
+	AutoTag string `json:"auto_tag" binding:"max=255"`
 }
 
 // SecretKeyRefResponse is the response representation of a SecretKeyRef.
@@ -75,6 +79,7 @@ type GitWatcherSpecResponse struct {
 	EntrypointFile string                `json:"entrypointFile,omitempty"`
 	ProjectDir     string                `json:"projectDir,omitempty"`
 	Description    string                `json:"description,omitempty"`
+	AutoTag        string                `json:"autoTag,omitempty"`
 }
 
 // GitWatcherStatusResponse is the status portion of a GitWatcherResponse.
@@ -88,6 +93,8 @@ type GitWatcherStatusResponse struct {
 	LastCheckedAt       *time.Time `json:"lastCheckedAt,omitempty"`
 	LastError           string     `json:"lastError,omitempty"`
 	Message             string     `json:"message,omitempty"`
+	ArtifactID          int64      `json:"artifactID,omitempty"`
+	LastAutoTag         string     `json:"lastAutoTag,omitempty"`
 }
 
 // GitWatcherResponse is the JSON representation of a GitWatcher CR.
@@ -122,6 +129,7 @@ func ToGitWatcherResponse(gw buildv1alpha1.GitWatcher) GitWatcherResponse {
 		EntrypointFile: gw.Spec.EntrypointFile,
 		ProjectDir:     gw.Spec.ProjectDir,
 		Description:    gw.Spec.Description,
+		AutoTag:        gw.Spec.AutoTag,
 	}
 	if gw.Spec.TokenSecretRef != nil {
 		spec.TokenSecretRef = &SecretKeyRefResponse{
@@ -139,6 +147,8 @@ func ToGitWatcherResponse(gw buildv1alpha1.GitWatcher) GitWatcherResponse {
 		ConsecutiveFailures: gw.Status.ConsecutiveFailures,
 		LastError:           gw.Status.LastError,
 		Message:             gw.Status.Message,
+		ArtifactID:          gw.Status.ArtifactID,
+		LastAutoTag:         gw.Status.LastAutoTag,
 	}
 	if gw.Status.LastCheckedAt != nil {
 		t := gw.Status.LastCheckedAt.Time
