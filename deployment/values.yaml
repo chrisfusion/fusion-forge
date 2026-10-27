@@ -345,14 +345,14 @@ postgresql:
   # ---------------------------------------------------------------------------
   createDatabaseJob:
     enabled: false
-    image: postgres:16-alpine
+    image: postgres:18-trixie
     activeDeadlineSeconds: 120
-    # postgres:16-alpine runs as UID 70 (user "postgres") — matches the bundled
-    # StatefulSet convention. Only the psql client is used (non-interactive -c
-    # mode), so readOnlyRootFilesystem is safe with no extra volumes.
+    # postgres:18-trixie (Debian, no Alpine) runs as UID 999 (user "postgres"). Only the
+    # psql client is used, with the SQL on stdin (dash heredocs need no temp file), so
+    # readOnlyRootFilesystem is safe with no extra volumes.
     podSecurityContext:
       runAsNonRoot: true
-      runAsUser: 70
+      runAsUser: 999
       seccompProfile:
         type: RuntimeDefault
     containerSecurityContext:

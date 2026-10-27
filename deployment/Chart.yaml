@@ -3,7 +3,7 @@ apiVersion: v2
 name: fusion-forge
 description: fusion-forge — async Python venv builder (REST server + Kubernetes operator)
 type: application
-version: 0.11.2
+version: 0.11.3
 appVersion: "0.11.1"
 
 keywords:

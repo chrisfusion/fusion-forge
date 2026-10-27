@@ -7,6 +7,12 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+### Changed
+- **Postgres hook Jobs (`createDatabaseJob`) use `postgres:18-trixie` (Debian) instead of `postgres:16-alpine`**, running as UID 999 (the Debian image's `postgres` user) instead of 70 — no Alpine images anymore. Verified with dash as `/bin/sh` under `readOnlyRootFilesystem`
+
+### Fixed
+- **`createDatabaseJob` never worked:** psql doesn't substitute `:'target'` inside `-c "..."`, so the existence check failed with a syntax error. The SQL now goes through a heredoc and `CREATE DATABASE` quotes the name server-side with `format('%I')` + `\gexec`
+
 ## [0.11.1] — 2026-10-27
 
 ### Fixed
