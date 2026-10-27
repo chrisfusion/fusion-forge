@@ -5,12 +5,13 @@ IMG                ?= fusion-forge:latest
 BUILDER_IMG        ?= fusion-venv-builder:latest
 BUILDER_IMG_PY310  ?= fusion-venv-builder-py310:latest
 NAMESPACE          ?= fusion
+CHART_CRDS         := deployment/crds
 
 .PHONY: all build test generate manifests docker-build docker-build-builder \
         docker-build-builder-py310 \
         install-crds install-rbac deploy undeploy minikube-deploy create-namespace
 
-.PHONY: vendor check-vendor
+.PHONY: vendor check-vendor sync-crds check-crds
 
 all: generate build
 
@@ -18,6 +19,17 @@ all: generate build
 generate:
 	$(CONTROLLER_GEN) object:headerFile="" paths="./api/..."
 	$(CONTROLLER_GEN) crd paths="./api/..." output:crd:dir=config/crd/bases
+
+## Copy the generated CRDs into the chart (Helm installs crds/ but never upgrades it;
+## Flux HelmReleases with crds: CreateReplace do). Run after `make generate`; neither target
+## regenerates, since generate rewrites the cibuilds CRD with no semantic change.
+sync-crds:
+	mkdir -p $(CHART_CRDS)
+	cp config/crd/bases/*.yaml $(CHART_CRDS)/
+
+## Fail when the chart's CRDs drifted from the generated ones.
+check-crds:
+	diff -r config/crd/bases $(CHART_CRDS)
 
 ## Refresh vendor/ from go.mod (committed so builds work offline).
 vendor:

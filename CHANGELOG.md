@@ -7,6 +7,14 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+## [0.11.1] — 2026-10-27
+
+### Fixed
+- **The chart now ships the `GitWatcher` CRD** in `deployment/crds/` and the `CIBuild` CRD there is current again (it lacked `appSource` and the `Type` column). Before, the GitWatcher CRD was only applied by hand, so a Flux-managed cluster kept an old one without `spec.autoTag`, and the API server silently dropped `autoTag` from every watcher (fusion-wizard's autoPromote did nothing). Flux `HelmRelease`s should set `install.crds`/`upgrade.crds: CreateReplace` (see FLUX.md), since Helm never upgrades `crds/` on its own
+
+### Added
+- `make sync-crds` copies `config/crd/bases/` into the chart, `make check-crds` fails when the two differ
+
 ## [0.11.0] — 2026-10-20
 
 ### Added

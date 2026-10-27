@@ -204,11 +204,17 @@ kubectl create secret generic fusion-forge-db-secret \
 
 ### GitWatcher CRD (all clusters)
 
-The `GitWatcher` CRD is **not Flux/Helm-managed** (to avoid field-manager conflicts) — apply it manually to each cluster once, before the first `HelmRelease` reconcile:
+Both CRDs (`CIBuild`, `GitWatcher`) ship in the chart's `deployment/crds/`. Helm installs that directory but never upgrades it, so set `crds: CreateReplace` on the `HelmRelease` (Flux then creates or replaces the CRDs on every install/upgrade):
 
-```bash
-kubectl apply -f config/crd/bases/build.fusion-platform.io_gitwatchers.yaml
+```yaml
+spec:
+  install:
+    crds: CreateReplace
+  upgrade:
+    crds: CreateReplace
 ```
+
+CRDs are cluster-scoped: on a cluster with several forge instances on different refs, let only the instance on the newest ref manage them (`crds: Skip` on the others). Without Flux, re-apply them by hand after every CRD change: `kubectl apply --server-side -f config/crd/bases/`.
 
 ---
 

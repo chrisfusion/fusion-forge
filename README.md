@@ -66,8 +66,9 @@ make docker-build                 IMG=fusion-forge:local
 make docker-build-builder         BUILDER_IMG=fusion-venv-builder:local
 make docker-build-builder-py310   BUILDER_IMG_PY310=fusion-venv-builder-py310:local
 
-# Install the GitWatcher CRD (not Helm-managed, to avoid field-manager conflicts)
-kubectl apply -f config/crd/bases/build.fusion-platform.io_gitwatchers.yaml
+# CRDs: helm install creates them from deployment/crds/, but helm upgrade never updates them —
+# re-apply after every CRD change
+kubectl apply --server-side -f config/crd/bases/
 
 # Deploy (Helm is the primary deployment method — see below)
 helm upgrade --install fusion-forge deployment/ -n fusion
@@ -104,8 +105,8 @@ Helm is the primary and only supported deployment method (`k8s/deployment.yaml` 
 ### Install
 
 ```bash
-# CRDs first — CIBuild is Helm-managed via deployment/crds/, but GitWatcher is not
-kubectl apply -f config/crd/bases/build.fusion-platform.io_gitwatchers.yaml
+# CRDs first — both ship in deployment/crds/, but helm upgrade never updates that directory
+kubectl apply --server-side -f config/crd/bases/
 
 # minikube (local images)
 helm upgrade --install fusion-forge deployment/ \
