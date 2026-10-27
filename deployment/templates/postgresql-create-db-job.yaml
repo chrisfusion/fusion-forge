@@ -48,11 +48,19 @@ spec:
           args:
             - |
               set -eu
-              EXISTS=$(psql -d postgres -tAc "SELECT 1 FROM pg_database WHERE datname = :'target'" -v target="${TARGET_DB}")
+              # NOTE: psql's :'var' substitution only works reading from a script/stdin,
+              # NOT via -c "..." (verified against postgres:16-alpine) — hence the heredocs.
+              # format('%I') quotes the name as an identifier server-side; \gexec runs it.
+              EXISTS=$(psql -d postgres -v ON_ERROR_STOP=1 -tA -v target="${TARGET_DB}" <<'SQL'
+              SELECT 1 FROM pg_database WHERE datname = :'target';
+              SQL
+              )
               if [ "${EXISTS}" = "1" ]; then
                 echo "database ${TARGET_DB} already exists on ${PGHOST}:${PGPORT} — nothing to do"
               else
-                psql -d postgres -c "CREATE DATABASE \"${TARGET_DB}\""
+                psql -d postgres -v ON_ERROR_STOP=1 -v target="${TARGET_DB}" <<'SQL'
+              SELECT format('CREATE DATABASE %I', :'target') \gexec
+              SQL
                 echo "database ${TARGET_DB} created on ${PGHOST}:${PGPORT}"
               fi
 {{- end }}
